@@ -19,7 +19,7 @@ data class Release(
  */
 object Updates {
 
-    const val RELEASES_API = "https://api.github.com/repos/sardine-mehico/iptv-player/releases?per_page=10"
+    const val RELEASES_API = "https://api.github.com/repos/uri-travoski/iptv-player/releases?per_page=10"
 
     /** Newest release with an APK, from GitHub's releases list (drafts skipped). */
     fun newest(reader: Reader): Release? {

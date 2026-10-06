@@ -79,7 +79,7 @@ class AppGraph(private val app: Application) {
      */
     val imageHttp: OkHttpClient by lazy {
         val version = app.packageManager.getPackageInfo(app.packageName, 0).versionName
-        val agent = "WorldTV/$version (Android TV; https://github.com/sardine-mehico/iptv-player)"
+        val agent = "WorldTV/$version (Android TV; https://github.com/uri-travoski/iptv-player)"
         http.newBuilder()
             .dispatcher(okhttp3.Dispatcher().apply { maxRequests = 4; maxRequestsPerHost = 2 })
             .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("User-Agent", agent).build()) }
