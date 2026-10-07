@@ -7,7 +7,9 @@ MVP document: https://claude.ai/code/artifact/f7b3b895-aef4-4a3d-9555-9848fd1bd0
 - **IBO parity:** if IBO Player Pro doesn't have a feature, don't build it. Exceptions the owner asked for:
   auto-start on boot; an optional 6-digit PIN per playlist that guards its details (URL, username,
   password) and deletion (not a parental lock: it never gates watching); launcher mode (HOME) with five
-  user-chosen app slots, All apps and Android settings; Reload playlist on the home screen.
+  user-chosen app slots, All apps and Android settings; Reload playlist on the home screen; a Mobile
+  (touch, portrait) layout chosen on first start next to TV, switchable in App Settings (`Prefs.uiMode`;
+  `*_mobile.xml` layouts, picked in each screen), with landscape full screen on phones.
 - **Not built:** cloud/website playlist management, activation/licensing, parental PIN, hidden categories,
   recent-channels list, multi-screen, recording, Stalker portals, PiP, USB playlist files, number-key zap.
 - No built-in content, playlists or provider links, ever.

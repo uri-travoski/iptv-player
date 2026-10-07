@@ -7,6 +7,13 @@
             <corners android:radius="6dp" />
         </shape>
     </item>
+    <!-- Touch (Mobile layout): pressed shows the accent too. -->
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/accent" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
     <!-- Playing (activated) and also the list being browsed (selected): fill + outline. -->
     <item android:state_activated="true" android:state_selected="true">
         <shape android:shape="rectangle">

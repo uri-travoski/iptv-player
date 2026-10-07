@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live full screen, shared by the TV and Mobile layouts: channel banner at the bottom, straight
+     on the video over a soft shade; the buttons appear with OK (remote) or a tap (touch). -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <FrameLayout
+        android:id="@+id/banner"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <!-- Touch only (the remote has Back). -->
+        <LinearLayout
+            android:id="@+id/osd_top"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:background="@drawable/bg_osd_top"
+            android:orientation="horizontal"
+            android:paddingStart="24dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="40dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/ctl_exit"
+                style="@style/OsdIcon"
+                android:layout_marginStart="0dp"
+                android:contentDescription="@string/back"
+                android:src="@drawable/ic_arrow_back" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_osd_bottom"
+            android:orientation="vertical"
+            android:paddingStart="48dp"
+            android:paddingTop="56dp"
+            android:paddingEnd="48dp"
+            android:paddingBottom="20dp">
+
+            <TextView
+                android:id="@+id/banner_name"
+                style="@style/Text.Title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textSize="26sp" />
+
+            <TextView
+                android:id="@+id/banner_info"
+                style="@style/Text.Secondary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp" />
+
+            <!-- Left/Right to move, OK to press; Up/Down still change channel. -->
+            <LinearLayout
+                android:id="@+id/controls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageView android:id="@+id/ctl_fav" style="@style/OsdIcon" android:contentDescription="@string/ctl_fav_add" android:src="@drawable/ic_star_border" />
+                <ImageView android:id="@+id/ctl_audio" style="@style/OsdIcon" android:contentDescription="@string/ctl_audio" android:src="@drawable/ic_audiotrack" />
+                <ImageView android:id="@+id/ctl_subs" style="@style/OsdIcon" android:contentDescription="@string/ctl_subs" android:src="@drawable/ic_subtitles" />
+
+                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+                <ImageView android:id="@+id/ctl_prev" style="@style/OsdIcon" android:contentDescription="@string/ctl_prev" android:src="@drawable/ic_skip_previous" />
+                <ImageView android:id="@+id/ctl_pause" style="@style/OsdPlay" android:contentDescription="@string/ctl_pause" android:src="@drawable/ic_pause" />
+                <ImageView android:id="@+id/ctl_next" style="@style/OsdIcon" android:contentDescription="@string/ctl_next" android:src="@drawable/ic_skip_next" />
+
+                <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+                <ImageView android:id="@+id/ctl_aspect" style="@style/OsdIcon" android:contentDescription="@string/ctl_aspect_fit" android:src="@drawable/ic_aspect" />
+                <ImageView android:id="@+id/ctl_external" style="@style/OsdIcon" android:contentDescription="@string/ctl_external" android:src="@drawable/ic_open_external" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Name of the focused button, placed above it (OsdTips). -->
+        <TextView
+            android:id="@+id/osd_tip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:background="@drawable/bg_osd_tip"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:visibility="invisible" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/osd_status"
+        style="@style/Text.Body"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@color/scrim"
+        android:padding="16dp"
+        android:visibility="gone" />
+</merge>

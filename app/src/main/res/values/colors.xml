@@ -5,6 +5,7 @@
     <color name="surface_active">#FF5E1A2A</color>
     <color name="divider">#FF57202D</color>
     <color name="accent">#FFB0243F</color>
+    <color name="accent_pressed">#FFC93D58</color>
     <color name="text_primary">#FFF7EEF0</color>
     <color name="text_secondary">#FFC9A9B0</color>
     <color name="error">#FFFF8A80</color>

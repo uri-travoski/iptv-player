@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Seek back 10 s: replay arrow with "10" inside. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ctl_back"
+    style="@style/OsdSeek"
+    android:contentDescription="@string/ctl_rewind_desc">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:duplicateParentState="true"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_replay"
+        android:tint="@color/text_primary" />
+
+    <TextView style="@style/OsdSeekNumber" android:text="10" />
+</FrameLayout>

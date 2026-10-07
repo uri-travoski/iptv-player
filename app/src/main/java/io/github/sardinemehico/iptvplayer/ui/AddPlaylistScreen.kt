@@ -32,6 +32,7 @@ class AddPlaylistScreen(activity: MainActivity, private val firstRun: Boolean = 
     private var busy = false
 
     init {
+        fullWidthOnMobile(R.id.form)
         modeXtream.setOnClickListener { setMode(true) }
         modeM3u.setOnClickListener { setMode(false) }
         save.setOnClickListener { submit() }

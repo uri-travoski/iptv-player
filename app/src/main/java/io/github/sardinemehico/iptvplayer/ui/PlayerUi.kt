@@ -4,6 +4,9 @@ import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.view.View
+import android.widget.TextView
+import androidx.core.view.ViewCompat
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
@@ -28,6 +31,13 @@ object PlayerUi {
         val next = MODES[(MODES.indexOf(view.resizeMode) + 1).mod(MODES.size)]
         view.resizeMode = next
         App.graph.prefs.resizeMode = next
+    }
+
+    /** The aspect button is an icon: say the new mode briefly, and keep it as the button's description. */
+    fun showAspect(activity: MainActivity, button: View) {
+        val label = activity.getString(aspectLabel(activity))
+        button.contentDescription = label
+        activity.toast(label)
     }
 
     fun aspectLabel(activity: MainActivity): Int = when (activity.playerView.resizeMode) {
@@ -93,5 +103,46 @@ object PlayerUi {
         val m = total / 60 % 60
         val s = total % 60
         return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+    }
+}
+
+/**
+ * Names the player's icon buttons: the focused one (remote) gets a label just above it, taken
+ * from its content description; on touch, a long-press shows Android's tooltip instead.
+ */
+class OsdTips(private val tip: TextView, private val buttons: List<View>) {
+
+    init {
+        for (b in buttons) {
+            ViewCompat.setTooltipText(b, b.contentDescription)
+            b.setOnFocusChangeListener { v, hasFocus -> if (hasFocus) show(v) else if (!buttons.any { it.isFocused }) hide() }
+        }
+    }
+
+    /** After a button's description changed (Pause → Play, Favourite → Unfavourite...). */
+    fun refresh() {
+        for (b in buttons) ViewCompat.setTooltipText(b, b.contentDescription)
+        buttons.firstOrNull { it.isFocused }?.let { show(it) }
+    }
+
+    fun hide() {
+        tip.visibility = View.INVISIBLE
+    }
+
+    private fun show(button: View) {
+        tip.text = button.contentDescription
+        tip.visibility = View.VISIBLE
+        // Laid out only now that it has text; place it once its size is known.
+        tip.post { place(button) }
+    }
+
+    private fun place(button: View) {
+        val parent = tip.parent as View
+        val b = IntArray(2).also { button.getLocationInWindow(it) }
+        val p = IntArray(2).also { parent.getLocationInWindow(it) }
+        val gap = 6 * button.resources.displayMetrics.density
+        val x = b[0] - p[0] + (button.width - tip.width) / 2f
+        tip.translationX = x.coerceIn(0f, (parent.width - tip.width).toFloat().coerceAtLeast(0f))
+        tip.translationY = b[1] - p[1] - tip.height - gap
     }
 }

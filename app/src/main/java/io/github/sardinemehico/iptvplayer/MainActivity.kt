@@ -2,6 +2,8 @@ package io.github.sardinemehico.iptvplayer
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Bundle
@@ -19,6 +21,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
@@ -26,6 +32,7 @@ import io.github.sardinemehico.iptvplayer.ui.AddPlaylistScreen
 import io.github.sardinemehico.iptvplayer.ui.HomeScreen
 import io.github.sardinemehico.iptvplayer.ui.PlaylistsScreen
 import io.github.sardinemehico.iptvplayer.ui.Screen
+import io.github.sardinemehico.iptvplayer.ui.UiModeScreen
 import kotlinx.coroutines.launch
 
 /**
@@ -63,6 +70,18 @@ class MainActivity : ComponentActivity() {
         screens = findViewById(R.id.screens)
         App.graph.player.attach(playerView)
         playerView.resizeMode = App.graph.prefs.resizeMode
+        // Draw under the status and navigation bars on every Android version (Android 15+ forces
+        // it anyway) and keep the screens clear of them; the video stays full-bleed. TV boxes
+        // report no bars, so nothing changes there.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // In video full screen the controls lie over the whole picture (the camera cutout too),
+        // so the shade under them reaches the edges.
+        ViewCompat.setOnApplyWindowInsetsListener(screens) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            if (videoFullscreen) v.setPadding(0, 0, 0, 0) else v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        setFullscreen(false)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -77,19 +96,62 @@ class MainActivity : ComponentActivity() {
         logStartup()
     }
 
-    /** First screen: add a playlist, pick one, or go straight home. */
     /**
-     * The home screen is always at the bottom of the stack (it is also the launcher, with the
-     * app slots); with no playlist yet, the add/choose screen opens on top of it.
+     * First screen. A new install first asks TV or Mobile. Then the home screen is always at the
+     * bottom of the stack (it is also the launcher, with the app slots); with no playlist yet,
+     * the add/choose screen opens on top of it.
      */
     private suspend fun route() {
         val graph = App.graph
         val playlists = graph.repo.playlists()
+        if (graph.prefs.uiMode == null) {
+            // Updated from a version without the choice: those installs are all TV boxes.
+            if (playlists.isNotEmpty()) graph.prefs.uiMode = Prefs.UI_TV
+            else return resetTo(UiModeScreen(this))
+        }
+        setFullscreen(false)
         val active = playlists.firstOrNull { it.id == graph.prefs.activePlaylist }
         push(HomeScreen(this))
         when {
             playlists.isEmpty() -> push(AddPlaylistScreen(this, firstRun = true))
             active == null -> push(PlaylistsScreen(this))
+        }
+    }
+
+    /** Rebuilds every screen, e.g. after switching between TV and Mobile; [thenSettings] reopens App Settings. */
+    fun restartUi(thenSettings: Boolean = false) {
+        resetTo(null)
+        lifecycleScope.launch {
+            route()
+            if (thenSettings) push(PlaylistsScreen(this@MainActivity))
+        }
+    }
+
+    /** Mobile: true while a screen shows video full screen (bars hidden, no inset padding). */
+    private var videoFullscreen = false
+
+    /**
+     * Mobile: video full screen turns the phone to landscape and hides the system bars; everything
+     * else is portrait with the bars shown. TV layout: TV boxes are left as they are; a phone or
+     * tablet set to the TV layout is held in landscape, which that layout is made for.
+     */
+    fun setFullscreen(on: Boolean) {
+        if (!App.graph.prefs.isMobile) {
+            val touch = packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
+            requestedOrientation = if (touch) ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            return
+        }
+        requestedOrientation = if (on) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+        if (videoFullscreen != on) {
+            videoFullscreen = on
+            ViewCompat.requestApplyInsets(screens)
+        }
+        val bars = WindowCompat.getInsetsController(window, window.decorView)
+        if (on) {
+            bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            bars.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            bars.show(WindowInsetsCompat.Type.systemBars())
         }
     }
 
@@ -154,15 +216,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Replaces the whole stack with [screen]. */
-    fun resetTo(screen: Screen) {
+    /** Replaces the whole stack with [screen] (or empties it). */
+    fun resetTo(screen: Screen?) {
         while (stack.isNotEmpty()) {
             val s = stack.removeAt(stack.size - 1)
             s.onHidden()
             screens.removeView(s.root)
             s.destroy()
         }
-        push(screen)
+        if (screen != null) push(screen)
     }
 
     /**

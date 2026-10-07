@@ -24,10 +24,12 @@ import java.util.Date
  * (1..14 slots, set in App Settings) continue in rows of 5 underneath. The big tiles shrink to
  * fit; extra rows scroll into view on focus.
  * WorldTV can be the box's launcher, so focus comes back to the tile the user left from.
+ * Mobile layout: the three tiles stacked, then only Reload playlist and App Settings.
  */
 class HomeScreen(activity: MainActivity) : Screen(activity) {
 
-    override val root: View = inflater.inflate(R.layout.screen_home, null)
+    private val mobile = graph.prefs.isMobile
+    override val root: View = inflater.inflate(if (mobile) R.layout.screen_home_mobile else R.layout.screen_home, null)
     private val account: TextView = root.findViewById(R.id.account)
     private val live: View = root.findViewById(R.id.tile_live)
     private val bigTiles: List<View> = listOf(live, root.findViewById(R.id.tile_movies), root.findViewById(R.id.tile_series))
@@ -50,6 +52,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         live.setOnClickListener { withPlaylist { activity.push(LiveScreen(activity)) } }
         bigTiles[1].setOnClickListener { withPlaylist { activity.push(VodScreen(activity, ContentType.MOVIE)) } }
         bigTiles[2].setOnClickListener { withPlaylist { activity.push(VodScreen(activity, ContentType.SERIES)) } }
+        if (mobile) bigTiles.forEach { shrinkIcon(it as TextView) }
         val version = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName
         root.findViewById<TextView>(R.id.version).text = activity.getString(R.string.version_label, version)
     }
@@ -88,9 +91,24 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
 
     // ---- rows ----
 
+    /** Mobile tiles: the 88dp TV icon drawn at 52dp beside the label. */
+    private fun shrinkIcon(tile: TextView) {
+        val icon = tile.compoundDrawablesRelative[0] ?: return
+        icon.setBounds(0, 0, dp(52), dp(52))
+        tile.setCompoundDrawablesRelative(icon, null, null, null)
+    }
+
     private fun buildRows(count: Int) {
         builtCount = count
         rows.removeAllViews()
+        if (mobile) {
+            val row = newRow(0)
+            addFixed(row, 0, "reload", R.drawable.ic_refresh, R.string.reload_playlist) { reloadPlaylist() }
+            addFixed(row, 1, "settings", R.drawable.ic_settings_small, R.string.settings) { activity.push(PlaylistsScreen(activity)) }
+            slots = emptyList()
+            slotApps = emptyList()
+            return
+        }
         val list = ArrayList<View>()
         // First row: the user's first app, then the four fixed tiles, always on the right.
         val first = newRow(0)

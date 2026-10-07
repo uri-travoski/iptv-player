@@ -9,6 +9,7 @@ import android.provider.Settings
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import io.github.sardinemehico.iptvplayer.MainActivity
@@ -35,6 +36,28 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
     private var busy = false
 
     init {
+        fullWidthOnMobile(R.id.form)
+        val uiMode = root.findViewById<TextView>(R.id.ui_mode)
+        uiMode.setText(if (graph.prefs.isMobile) R.string.ui_mode_setting_mobile else R.string.ui_mode_setting_tv)
+        uiMode.setOnClickListener {
+            graph.prefs.uiMode = if (graph.prefs.isMobile) Prefs.UI_TV else Prefs.UI_MOBILE
+            activity.restartUi(thenSettings = true)
+        }
+        if (graph.prefs.isMobile) {
+            // Launcher and boot options are for TV boxes.
+            for (id in intArrayOf(R.id.auto_start, R.id.slot_count, R.id.default_home, R.id.launcher_row)) {
+                root.findViewById<View>(id).visibility = View.GONE
+            }
+            root.findViewById<TextView>(R.id.playlists_hint).setText(R.string.playlists_hint_mobile)
+            // Narrow screen: "Check for updates on start: On" takes two lines; let the tiles grow.
+            val pad = (10 * activity.resources.displayMetrics.density).toInt()
+            for (id in intArrayOf(R.id.auto_update, R.id.check_update)) {
+                val tile = root.findViewById<TextView>(id)
+                tile.minHeight = tile.layoutParams.height
+                tile.layoutParams = tile.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
+                tile.setPadding(tile.paddingLeft, pad, tile.paddingRight, pad)
+            }
+        }
         add.setOnClickListener { activity.push(AddPlaylistScreen(activity)) }
         autoStart.setOnClickListener { toggleAutoStart() }
         val slotCount = root.findViewById<TextView>(R.id.slot_count)
@@ -99,7 +122,7 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
     private fun updateAutoStart() {
         val prefs = graph.prefs
         autoStart.setText(if (prefs.autoStart) R.string.auto_start_on else R.string.auto_start_off)
-        if (!prefs.autoStart) {
+        if (!prefs.autoStart || prefs.isMobile) {
             autoStartStatus.visibility = View.GONE
             return
         }

@@ -5,6 +5,7 @@
 
     <!-- Scrolls when there are many playlists. -->
     <ScrollView
+        android:id="@+id/form"
         android:layout_width="560dp"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
@@ -24,11 +25,19 @@
             android:layout_height="wrap_content"
             android:text="@string/settings" />
 
+        <!-- TV (remote) or Mobile (touch) layout; switching rebuilds every screen. -->
+        <TextView
+            android:id="@+id/ui_mode"
+            style="@style/TileButton"
+            android:layout_width="match_parent"
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical|start" />
+
         <TextView
             android:id="@+id/auto_start"
             style="@style/TileButton"
             android:layout_width="match_parent"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:gravity="center_vertical|start"
             android:text="@string/auto_start_off" />
 
@@ -53,6 +62,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:baselineAligned="false"
             android:layout_marginTop="12dp"
             android:orientation="horizontal">
 
@@ -91,6 +101,7 @@
 
         <!-- Way out to other apps and the box's own settings: needed when WorldTV is the launcher. -->
         <LinearLayout
+            android:id="@+id/launcher_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
@@ -121,11 +132,12 @@
             android:textStyle="bold" />
 
         <TextView
+            android:id="@+id/playlists_hint"
             style="@style/Text.Secondary"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="OK to open · Menu or long-press for refresh and delete" />
+            android:text="@string/playlists_hint_tv" />
 
         <LinearLayout
             android:id="@+id/list"

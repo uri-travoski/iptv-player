@@ -4,8 +4,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
-import android.widget.ProgressBar
 import android.widget.ImageView
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
@@ -34,6 +34,8 @@ class PlayItem(
  * Keys: OK shows the controls (then presses the focused button); Left/Right with the controls
  * hidden seek 10 s back / 30 s forward; Play/Pause, FF/REW and Next/Previous media keys work;
  * Back hides the controls first, then leaves the player.
+ * Touch (Mobile layout): a tap shows or hides the controls, the bar can be dragged, the arrow
+ * top left leaves. On phones the player turns to landscape.
  */
 class PlayerScreen(
     activity: MainActivity,
@@ -48,12 +50,20 @@ class PlayerScreen(
     private val title: TextView = root.findViewById(R.id.title)
     private val positionText: TextView = root.findViewById(R.id.position)
     private val durationText: TextView = root.findViewById(R.id.duration)
-    private val progress: ProgressBar = root.findViewById(R.id.progress)
+    private val progress: SeekBar = root.findViewById(R.id.progress)
     private val osdStatus: TextView = root.findViewById(R.id.osd_status)
     private val ctlPrev: View = root.findViewById(R.id.ctl_prev)
     private val ctlNext: View = root.findViewById(R.id.ctl_next)
     private val ctlPause: ImageView = root.findViewById(R.id.ctl_pause)
-    private val ctlAspect: TextView = root.findViewById(R.id.ctl_aspect)
+    private val ctlAspect: ImageView = root.findViewById(R.id.ctl_aspect)
+    private val tips = OsdTips(
+        root.findViewById(R.id.osd_tip),
+        listOf(
+            R.id.ctl_audio, R.id.ctl_subs, R.id.ctl_prev, R.id.ctl_back, R.id.ctl_pause, R.id.ctl_fwd, R.id.ctl_next, R.id.ctl_aspect, R.id.ctl_external,
+        ).map { root.findViewById<View>(it) },
+    )
+    /** True while a finger drags the seek bar: the bar is not updated under it. */
+    private var dragging = false
 
     private var index = start.coerceIn(0, items.lastIndex)
     /** Where to pick up after the app was in the background (onStop stops the stream). */
@@ -105,10 +115,34 @@ class PlayerScreen(
         root.findViewById<View>(R.id.ctl_subs).setOnClickListener { chooseTrack(C.TRACK_TYPE_TEXT) }
         ctlAspect.setOnClickListener {
             PlayerUi.cycleAspect(activity)
-            ctlAspect.setText(PlayerUi.aspectLabel(activity))
+            PlayerUi.showAspect(activity, ctlAspect)
+            tips.refresh()
             scheduleHide()
         }
-        ctlAspect.setText(PlayerUi.aspectLabel(activity))
+        ctlAspect.contentDescription = activity.getString(PlayerUi.aspectLabel(activity))
+        root.setOnClickListener { if (overlay.visibility == View.VISIBLE) hideOverlay() else showOverlay() }
+        val exit = root.findViewById<View>(R.id.ctl_exit)
+        if (graph.prefs.isMobile) exit.visibility = View.VISIBLE
+        exit.setOnClickListener { activity.pop() }
+        progress.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                val dur = graph.player.durationMs
+                if (dur > 0) positionText.text = PlayerUi.time(dur * value / 1000)
+            }
+
+            override fun onStartTrackingTouch(bar: SeekBar) {
+                dragging = true
+                handler.removeCallbacks(hide)
+            }
+
+            override fun onStopTrackingTouch(bar: SeekBar) {
+                dragging = false
+                val dur = graph.player.durationMs
+                if (dur > 0) graph.player.player.seekTo(dur * bar.progress / 1000)
+                scheduleHide()
+            }
+        })
         root.findViewById<View>(R.id.ctl_external).setOnClickListener {
             val item = items[index]
             resumeAt = graph.player.positionMs
@@ -117,6 +151,7 @@ class PlayerScreen(
     }
 
     override fun onShown() {
+        activity.setFullscreen(true)
         activity.setVideoRect(null)
         activity.keepScreenOn(true)
         graph.player.addListener(listener)
@@ -125,6 +160,7 @@ class PlayerScreen(
     }
 
     override fun onHidden() {
+        activity.setFullscreen(false)
         activity.keepScreenOn(false)
         graph.player.removeListener(listener)
         resumeAt = graph.player.positionMs
@@ -216,6 +252,7 @@ class PlayerScreen(
         val paused = graph.player.isPaused
         ctlPause.setImageResource(if (paused) R.drawable.ic_play else R.drawable.ic_pause)
         ctlPause.contentDescription = activity.getString(if (paused) R.string.ctl_play else R.string.ctl_pause)
+        tips.refresh()
     }
 
     private fun chooseTrack(type: Int) {
@@ -250,10 +287,13 @@ class PlayerScreen(
     }
 
     private fun updateProgress() {
+        if (dragging) return
         val pos = graph.player.positionMs
         val dur = graph.player.durationMs
         positionText.text = PlayerUi.time(pos)
         durationText.text = if (dur > 0) PlayerUi.time(dur) else ""
+        progress.isEnabled = dur > 0
         progress.progress = if (dur > 0) (pos * 1000 / dur).toInt() else 0
+        progress.secondaryProgress = if (dur > 0) (graph.player.player.bufferedPosition * 1000 / dur).toInt() else 0
     }
 }

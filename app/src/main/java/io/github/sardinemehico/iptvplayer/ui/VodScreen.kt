@@ -21,10 +21,12 @@ import kotlinx.coroutines.launch
 /**
  * Movies or Series: categories on the left, a paged poster grid on the right.
  * OK on a poster opens its page; Menu toggles favourite. Back returns to the same poster.
+ * Mobile layout: categories in a sideways strip above the grid; long-press toggles favourite.
  */
 class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(activity) {
 
-    override val root: View = inflater.inflate(R.layout.screen_vod, null)
+    private val mobile = graph.prefs.isMobile
+    override val root: View = inflater.inflate(if (mobile) R.layout.screen_vod_mobile else R.layout.screen_vod, null)
 
     private val categoriesView: RecyclerView = root.findViewById(R.id.categories)
     private val grid: RecyclerView = root.findViewById(R.id.grid)
@@ -32,8 +34,14 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
     private val empty: View = root.findViewById(R.id.empty)
     private val searchField: EditText = root.findViewById(R.id.search)
 
-    private val categoryAdapter = CategoryAdapter(onFocused = ::onCategoryFocused, onClicked = ::onCategoryClicked)
-    private val posterAdapter = PagedEntryAdapter(scope, ::onPosterClicked, R.layout.row_poster)
+    private val categoryAdapter = CategoryAdapter(
+        onFocused = ::onCategoryFocused,
+        onClicked = ::onCategoryClicked,
+        layout = if (mobile) R.layout.row_category_chip else R.layout.row_category,
+    )
+    private val posterAdapter = PagedEntryAdapter(scope, ::onPosterClicked, R.layout.row_poster, ::toggleFavourite)
+    /** TV: 5. Mobile: as many ~120dp posters as fit across (3 on most phones). */
+    private val columns = if (mobile) (activity.resources.configuration.screenWidthDp / 120).coerceAtLeast(2) else COLUMNS
 
     private var playlist: Playlist? = null
     private var categories: List<CategoryRow> = emptyList()
@@ -50,14 +58,14 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
 
     init {
         root.findViewById<TextView>(R.id.title).setText(if (type == ContentType.MOVIE) R.string.movies else R.string.series)
-        categoriesView.layoutManager = LinearLayoutManager(activity)
+        categoriesView.layoutManager = LinearLayoutManager(activity, if (mobile) RecyclerView.HORIZONTAL else RecyclerView.VERTICAL, false)
         categoriesView.adapter = categoryAdapter
         categoriesView.itemAnimator = null
-        grid.layoutManager = GridLayoutManager(activity, COLUMNS)
+        grid.layoutManager = GridLayoutManager(activity, columns)
         grid.adapter = posterAdapter
         grid.itemAnimator = null
         grid.setHasFixedSize(true)
-        grid.setItemViewCacheSize(COLUMNS * 2)
+        grid.setItemViewCacheSize(columns * 2)
     }
 
     override fun onShown() {
@@ -86,13 +94,17 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
         if (focused.parent !== grid) return false
         val pos = grid.getChildAdapterPosition(focused)
         val row = posterAdapter.rowAt(pos) ?: return true
-        val p = playlist ?: return true
+        toggleFavourite(pos, row)
+        return true
+    }
+
+    private fun toggleFavourite(pos: Int, row: EntryRow) {
+        val p = playlist ?: return
         scope.launch {
             val fav = graph.repo.toggleFavourite(p.id, type, row.itemId)
             activity.toast(activity.getString(if (fav) R.string.favourite_added else R.string.favourite_removed))
             if (categoryKey == Repository.KEY_FAV) reloadList() else posterAdapter.setFavourite(pos, fav)
         }
-        return true
     }
 
     private suspend fun load() {

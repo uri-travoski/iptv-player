@@ -5,6 +5,7 @@
 
     <!-- Scrolls on 540dp-tall TV screens now that the form has a PIN field. -->
     <ScrollView
+        android:id="@+id/form"
         android:layout_width="560dp"
         android:layout_height="wrap_content"
         android:layout_gravity="center"

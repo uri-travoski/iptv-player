@@ -16,10 +16,14 @@ import io.github.sardinemehico.iptvplayer.data.repo.EntryRow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** Categories are few (tens to hundreds), so they are held in memory. */
+/**
+ * Categories are few (tens to hundreds), so they are held in memory. [layout]: a TV list row, or
+ * row_category_chip for the Mobile layout's sideways strip.
+ */
 class CategoryAdapter(
     private val onFocused: (Int) -> Unit,
     private val onClicked: (Int) -> Unit,
+    private val layout: Int = R.layout.row_category,
 ) : RecyclerView.Adapter<CategoryAdapter.VH>() {
 
     var items: List<CategoryRow> = emptyList()
@@ -54,7 +58,7 @@ class CategoryAdapter(
     override fun getItemId(position: Int) = position.toLong()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val v = LayoutInflater.from(parent.context).inflate(R.layout.row_category, parent, false) as TextView
+        val v = LayoutInflater.from(parent.context).inflate(layout, parent, false) as TextView
         return VH(v)
     }
 
@@ -85,6 +89,8 @@ class PagedEntryAdapter(
     private val scope: CoroutineScope,
     private val onClicked: (Int, EntryRow) -> Unit,
     private val layout: Int = R.layout.row_channel,
+    /** Long-press (touch): what the remote's Menu key does, e.g. toggle favourite. */
+    private val onLongClicked: ((Int, EntryRow) -> Unit)? = null,
 ) : RecyclerView.Adapter<PagedEntryAdapter.VH>() {
 
     private var loader: (suspend (offset: Int, limit: Int) -> List<EntryRow>)? = null
@@ -214,6 +220,14 @@ class PagedEntryAdapter(
                 val pos = bindingAdapterPosition
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
                 rowAt(pos)?.let { onClicked(pos, it) }
+            }
+            if (onLongClicked != null) {
+                view.setOnLongClickListener {
+                    val pos = bindingAdapterPosition
+                    val row = if (pos == RecyclerView.NO_POSITION) null else rowAt(pos)
+                    row?.let { onLongClicked.invoke(pos, it) }
+                    row != null
+                }
             }
         }
     }

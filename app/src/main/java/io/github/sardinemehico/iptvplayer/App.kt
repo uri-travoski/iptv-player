@@ -100,7 +100,17 @@ class Prefs(private val sp: SharedPreferences) {
         const val MIN_SLOTS = 1
         const val DEFAULT_SLOTS = 2
         const val MAX_SLOTS = 14
+        const val UI_TV = "tv"
+        const val UI_MOBILE = "mobile"
     }
+
+    /** UI_TV (remote, D-pad) or UI_MOBILE (touch, portrait); null until picked on first start. */
+    var uiMode: String?
+        get() = sp.getString("ui_mode", null)
+        set(v) = sp.edit().putString("ui_mode", v).apply()
+
+    val isMobile: Boolean get() = uiMode == UI_MOBILE
+
     var activePlaylist: Long
         get() = sp.getLong("active_playlist", -1)
         set(v) = sp.edit().putLong("active_playlist", v).apply()

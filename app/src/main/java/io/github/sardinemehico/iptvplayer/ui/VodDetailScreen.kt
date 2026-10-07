@@ -38,7 +38,7 @@ class VodDetailScreen(
     private val onFavourite: (Boolean) -> Unit,
 ) : Screen(activity) {
 
-    override val root: View = inflater.inflate(R.layout.screen_vod_detail, null)
+    override val root: View = inflater.inflate(if (graph.prefs.isMobile) R.layout.screen_vod_detail_mobile else R.layout.screen_vod_detail, null)
 
     private val poster: ImageView = root.findViewById(R.id.poster)
     private val meta: TextView = root.findViewById(R.id.meta)

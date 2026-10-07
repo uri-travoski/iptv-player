@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Seek forward 30 s: forward arrow with "30" inside. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ctl_fwd"
+    style="@style/OsdSeek"
+    android:contentDescription="@string/ctl_forward_desc">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:duplicateParentState="true"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_forward"
+        android:tint="@color/text_primary" />
+
+    <TextView style="@style/OsdSeekNumber" android:text="30" />
+</FrameLayout>

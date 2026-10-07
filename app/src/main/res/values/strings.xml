@@ -60,10 +60,11 @@
     <string name="nothing_here">Nothing in this category</string>
     <string name="season_n">Season %1$d</string>
     <string name="no_episodes">No episodes found</string>
-    <string name="ctl_rewind">« 10s</string>
-    <string name="ctl_forward">30s »</string>
-    <string name="ctl_prev_ep">‹ Prev ep</string>
-    <string name="ctl_next_ep">Next ep ›</string>
+    <string name="ctl_rewind_desc">Back 10 seconds</string>
+    <string name="ctl_forward_desc">Forward 30 seconds</string>
+    <string name="ctl_prev_ep">Previous episode</string>
+    <string name="ctl_next_ep">Next episode</string>
+    <string name="back">Back</string>
 
     <string name="search">Search</string>
     <string name="search_results">Search: “%1$s”</string>
@@ -130,4 +131,15 @@
     <string name="update_downloading">Downloading… %1$d%%</string>
     <string name="update_allow_install">Allow WorldTV to install apps, then press Back: the update continues.</string>
     <string name="update_failed">Update failed: %1$s</string>
+
+    <string name="ui_mode_title">How will you use WorldTV?</string>
+    <string name="ui_mode_note">You can change this later in App Settings.</string>
+    <string name="ui_mode_tv">TV</string>
+    <string name="ui_mode_tv_hint">TV box or stick, with a remote</string>
+    <string name="ui_mode_mobile">Mobile</string>
+    <string name="ui_mode_mobile_hint">Phone or tablet, with touch</string>
+    <string name="ui_mode_setting_tv">Layout: TV (OK to switch to Mobile)</string>
+    <string name="ui_mode_setting_mobile">Layout: Mobile (tap to switch to TV)</string>
+    <string name="playlists_hint_tv">OK to open · Menu or long-press for refresh and delete</string>
+    <string name="playlists_hint_mobile">Tap to open · Long-press for refresh and delete</string>
 </resources>

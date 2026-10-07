@@ -3,6 +3,9 @@ package io.github.sardinemehico.iptvplayer.ui
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.lifecycle.lifecycleScope
 import io.github.sardinemehico.iptvplayer.App
 import io.github.sardinemehico.iptvplayer.MainActivity
@@ -26,6 +29,18 @@ abstract class Screen(protected val activity: MainActivity) {
     }
 
     abstract val root: View
+
+    /** Mobile layout: the TV's fixed-width centred column ([id]) takes the phone's full width, from the top. */
+    protected fun fullWidthOnMobile(id: Int) {
+        if (!graph.prefs.isMobile) return
+        val v = root.findViewById<View>(id)
+        v.layoutParams = (v.layoutParams as FrameLayout.LayoutParams).apply {
+            width = ViewGroup.LayoutParams.MATCH_PARENT
+            gravity = Gravity.TOP
+        }
+        val side = (16 * activity.resources.displayMetrics.density).toInt()
+        v.setPadding(side, v.paddingTop, side, v.paddingBottom)
+    }
 
     /** Called each time the screen becomes the top of the stack. */
     open fun onShown() {}

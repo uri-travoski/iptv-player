@@ -30,10 +30,13 @@ import kotlinx.coroutines.launch
  * OK on a channel plays it in the preview; OK again goes full screen.
  * Full screen: Up/Down or CH+/CH- zap, OK shows the controls, Back steps back one level
  * (controls → full screen → list), always to the same category and channel.
+ * Mobile layout: preview on top and a sideways category strip; tap = OK, long-press = Menu, a tap
+ * on the preview goes full screen (landscape), a tap on the video shows the controls.
  */
 class LiveScreen(activity: MainActivity) : Screen(activity) {
 
-    override val root: View = inflater.inflate(R.layout.screen_live, null)
+    private val mobile = graph.prefs.isMobile
+    override val root: View = inflater.inflate(if (mobile) R.layout.screen_live_mobile else R.layout.screen_live, null)
 
     private val panels: View = root.findViewById(R.id.panels)
     private val categoriesView: RecyclerView = root.findViewById(R.id.categories)
@@ -49,15 +52,25 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     private val osdStatus: TextView = root.findViewById(R.id.osd_status)
     private val controls: View = root.findViewById(R.id.controls)
     private val ctlPause: ImageView = root.findViewById(R.id.ctl_pause)
-    private val ctlAspect: TextView = root.findViewById(R.id.ctl_aspect)
-    private val ctlFav: TextView = root.findViewById(R.id.ctl_fav)
+    private val ctlAspect: ImageView = root.findViewById(R.id.ctl_aspect)
+    private val ctlFav: ImageView = root.findViewById(R.id.ctl_fav)
     private val searchField: EditText = root.findViewById(R.id.search)
+    private val tips = OsdTips(
+        root.findViewById(R.id.osd_tip),
+        listOf(
+            R.id.ctl_fav, R.id.ctl_audio, R.id.ctl_subs, R.id.ctl_prev, R.id.ctl_pause, R.id.ctl_next, R.id.ctl_aspect, R.id.ctl_external,
+        ).map { root.findViewById<View>(it) },
+    )
 
     private val handler = Handler(Looper.getMainLooper())
     private val hideBanner = Runnable { hideOverlay() }
 
-    private val categoryAdapter = CategoryAdapter(onFocused = ::onCategoryFocused, onClicked = ::onCategoryClicked)
-    private val channelAdapter = PagedEntryAdapter(scope, ::onChannelClicked)
+    private val categoryAdapter = CategoryAdapter(
+        onFocused = ::onCategoryFocused,
+        onClicked = ::onCategoryClicked,
+        layout = if (mobile) R.layout.row_category_chip else R.layout.row_category,
+    )
+    private val channelAdapter = PagedEntryAdapter(scope, ::onChannelClicked, onLongClicked = ::toggleFavourite)
 
     private var playlist: Playlist? = null
     private var urls: XtreamUrls? = null
@@ -97,7 +110,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     }
 
     init {
-        categoriesView.layoutManager = LinearLayoutManager(activity)
+        categoriesView.layoutManager = LinearLayoutManager(activity, if (mobile) RecyclerView.HORIZONTAL else RecyclerView.VERTICAL, false)
         categoriesView.adapter = categoryAdapter
         categoriesView.itemAnimator = null
         channelsView.layoutManager = LinearLayoutManager(activity)
@@ -114,7 +127,15 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         ctlAspect.setOnClickListener { cycleAspect() }
         ctlFav.setOnClickListener { playingRow?.let { toggleFavourite(playingIndex, it) } }
         root.findViewById<View>(R.id.ctl_external).setOnClickListener { openExternal() }
-        updateAspectLabel()
+        ctlAspect.contentDescription = activity.getString(PlayerUi.aspectLabel(activity))
+        if (mobile) root.findViewById<View>(R.id.osd_top).visibility = View.VISIBLE
+        root.findViewById<View>(R.id.ctl_exit).setOnClickListener { exitFullscreen() }
+        // Touch: a tap on the video shows or hides the controls; a tap on the preview goes full screen.
+        root.setOnClickListener {
+            if (!fullscreen) return@setOnClickListener
+            if (banner.visibility == View.VISIBLE) hideOverlay() else showOverlay(withControls = true)
+        }
+        preview.setOnClickListener { if (playingRow != null && !fullscreen) enterFullscreen() }
 
         // Keep the preview 16:9 and put the video exactly under it whenever layout changes.
         preview.addOnLayoutChangeListener { v, left, _, right, _, _, _, _, _ ->
@@ -129,6 +150,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
 
     override fun onShown() {
         activity.keepScreenOn(true)
+        activity.setFullscreen(fullscreen)
         graph.player.addListener(playerListener)
         if (fullscreen) activity.setVideoRect(null) else preview.post { placeVideoInPreview() }
         if (!loaded) {
@@ -141,6 +163,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
 
     override fun onHidden() {
         activity.keepScreenOn(false)
+        if (fullscreen) activity.setFullscreen(false)
         graph.player.removeListener(playerListener)
         graph.player.stop()
         handler.removeCallbacksAndMessages(null)
@@ -360,6 +383,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     private fun enterFullscreen() {
         fullscreen = true
         panels.visibility = View.INVISIBLE
+        activity.setFullscreen(true)
         activity.setVideoRect(null)
         // The root only takes focus in full screen, so it never steals D-pad focus from the lists.
         root.isFocusable = true
@@ -368,7 +392,9 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     }
 
     private fun exitFullscreen() {
+        if (!fullscreen) return
         fullscreen = false
+        activity.setFullscreen(false)
         handler.removeCallbacks(hideBanner)
         banner.visibility = View.GONE
         controls.visibility = View.GONE
@@ -429,10 +455,14 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         val paused = graph.player.isPaused
         ctlPause.setImageResource(if (paused) R.drawable.ic_play else R.drawable.ic_pause)
         ctlPause.contentDescription = activity.getString(if (paused) R.string.ctl_play else R.string.ctl_pause)
+        tips.refresh()
     }
 
     private fun updateFavLabel() {
-        ctlFav.setText(if (playingRow?.favourite == true) R.string.ctl_fav_remove else R.string.ctl_fav_add)
+        val fav = playingRow?.favourite == true
+        ctlFav.setImageResource(if (fav) R.drawable.ic_star else R.drawable.ic_star_border)
+        ctlFav.contentDescription = activity.getString(if (fav) R.string.ctl_fav_remove else R.string.ctl_fav_add)
+        tips.refresh()
     }
 
     private fun openExternal() {
@@ -443,11 +473,10 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
 
     private fun cycleAspect() {
         PlayerUi.cycleAspect(activity)
-        updateAspectLabel()
+        PlayerUi.showAspect(activity, ctlAspect)
+        tips.refresh()
         scheduleHide()
     }
-
-    private fun updateAspectLabel() = ctlAspect.setText(PlayerUi.aspectLabel(activity))
 
     /** Audio or subtitle picker. The overlay stays up while the dialog is open. */
     private fun chooseTrack(type: Int) {
