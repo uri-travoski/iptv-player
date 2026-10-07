@@ -115,6 +115,8 @@ class AddPlaylistScreen(activity: MainActivity, private val firstRun: Boolean = 
     /** While loading: dots animate, the form is locked so a stray OK can't edit or resubmit it. */
     private fun setBusy(on: Boolean) {
         busy = on
+        // A phone that sleeps mid-load drops the connection ("Software caused connection abort").
+        activity.keepScreenOn(on)
         busyDots.visibility = if (on) View.VISIBLE else View.GONE
         for (v in listOf(modeXtream, modeM3u, name, server, username, password, m3uUrl, pin, save)) v.isEnabled = !on
         save.setText(if (on) R.string.loading else R.string.save_and_load)

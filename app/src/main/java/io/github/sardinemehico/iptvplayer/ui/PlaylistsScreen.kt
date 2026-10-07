@@ -227,6 +227,7 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
 
     private fun refresh(p: Playlist) {
         busy = true
+        activity.keepScreenOn(true) // a phone that sleeps mid-refresh drops the connection
         busyDots.visibility = View.VISIBLE
         message.setTextColor(activity.getColor(R.color.text_secondary))
         scope.launch {
@@ -240,6 +241,7 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
                 message.text = e.message ?: "Refresh failed"
             } finally {
                 busy = false
+                activity.keepScreenOn(false)
                 busyDots.visibility = View.GONE
             }
         }

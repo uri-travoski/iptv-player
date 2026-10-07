@@ -303,6 +303,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     private fun reloadPlaylist() {
         if (reloading) return
         reloading = true
+        activity.keepScreenOn(true) // a phone that sleeps mid-reload drops the connection
         busy.visibility = View.VISIBLE
         reloadStatus.setTextColor(activity.getColor(R.color.text_secondary))
         reloadStatus.setText(R.string.reloading)
@@ -323,6 +324,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
                 reloadStatus.text = activity.getString(R.string.reload_failed, e.message ?: e.javaClass.simpleName)
             } finally {
                 reloading = false
+                activity.keepScreenOn(false)
                 busy.visibility = View.GONE
             }
         }
