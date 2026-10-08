@@ -210,6 +210,7 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
             activity.getString(R.string.action_open),
             activity.getString(R.string.action_refresh),
             activity.getString(R.string.action_details),
+            activity.getString(R.string.action_categories),
             activity.getString(R.string.action_delete),
         )
         AlertDialog.Builder(activity)
@@ -219,7 +220,8 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
                     0 -> open(p)
                     1 -> refresh(p)
                     2 -> PinPrompt.require(activity, p) { details(p) }
-                    3 -> PinPrompt.require(activity, p) { delete(p) }
+                    3 -> manageCategories(p)
+                    4 -> PinPrompt.require(activity, p) { delete(p) }
                 }
             }
             .show()
@@ -243,6 +245,26 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
                 busy = false
                 activity.keepScreenOn(false)
                 busyDots.visibility = View.GONE
+            }
+        }
+    }
+
+    /**
+     * Which categories are shown: behind the playlist's PIN, so viewers can't change it. A
+     * playlist without a PIN gets one set first; otherwise anyone could undo the choice.
+     */
+    private fun manageCategories(p: Playlist) {
+        if (p.hasPin) {
+            PinPrompt.require(activity, p) { activity.push(CategoriesScreen(activity, p)) }
+            return
+        }
+        activity.toast(activity.getString(R.string.categories_need_pin))
+        PinPrompt.askNew(activity, canRemove = false) { pin ->
+            if (pin == null) return@askNew
+            scope.launch {
+                graph.repo.setPin(p.id, Pin.hash(pin))
+                activity.toast(activity.getString(R.string.pin_saved))
+                activity.push(CategoriesScreen(activity, graph.repo.playlist(p.id) ?: p))
             }
         }
     }

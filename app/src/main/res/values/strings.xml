@@ -18,6 +18,22 @@
     <string name="action_refresh">Refresh</string>
     <string name="action_delete">Delete</string>
     <string name="action_details">Details</string>
+    <string name="action_categories">Categories (show / hide)</string>
+    <string name="categories_title">Categories · %1$s</string>
+    <string name="categories_hint">OK: show or hide a category · Menu or long-press: show or hide single channels in it. Hidden items are left out everywhere, including All, Favourites and search.</string>
+    <string name="entries_hint">OK: show or hide this entry. Hidden entries are left out everywhere, including All, Favourites and search.</string>
+    <string name="categories_hidden_entries">(%1$d hidden)</string>
+    <string name="categories_show_all">Show all</string>
+    <string name="categories_hide_all">Hide all</string>
+    <string name="categories_hide_adult">Hide adult</string>
+    <string name="categories_adult_note">“Hide adult” goes by name only: it hides categories whose names contain words like Adult, XXX, 18+ or Porn. Anything named differently is not caught, so check the list yourself.</string>
+    <string name="categories_summary">%1$d of %2$d shown</string>
+    <plurals name="categories_adult_hidden">
+        <item quantity="one">%1$d adult category hidden</item>
+        <item quantity="other">%1$d adult categories hidden</item>
+    </plurals>
+    <string name="categories_adult_none">No adult categories found by name</string>
+    <string name="categories_need_pin">Set a PIN first, so only you can change which categories are shown</string>
     <string name="hint_pin">6-digit PIN to protect details (optional)</string>
     <string name="pin_enter">PIN for %1$s</string>
     <string name="pin_new">New 6-digit PIN</string>

@@ -75,6 +75,31 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
             )""",
         )
         createProgress(db)
+        createHiddenCategories(db)
+    }
+
+    /**
+     * Categories and single entries an admin hid for a playlist (App Settings > playlist >
+     * Categories, behind its PIN). Kept outside `category`/`entry`, like favourites, so they stay
+     * hidden after a re-sync.
+     */
+    private fun createHiddenCategories(db: SQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS hidden_category (
+                playlist_id INTEGER NOT NULL,
+                type INTEGER NOT NULL,
+                cat_id TEXT NOT NULL,
+                PRIMARY KEY (playlist_id, type, cat_id)
+            )""",
+        )
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS hidden_item (
+                playlist_id INTEGER NOT NULL,
+                type INTEGER NOT NULL,
+                item_id TEXT NOT NULL,
+                PRIMARY KEY (playlist_id, type, item_id)
+            )""",
+        )
     }
 
     /**
@@ -99,9 +124,10 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) db.execSQL("ALTER TABLE playlist ADD COLUMN pin_hash TEXT")
         if (oldVersion < 3) createProgress(db)
+        if (oldVersion < 4) createHiddenCategories(db)
     }
 
     companion object {
-        const val VERSION = 3
+        const val VERSION = 4
     }
 }

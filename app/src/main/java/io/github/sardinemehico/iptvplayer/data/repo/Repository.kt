@@ -36,6 +36,12 @@ data class Playlist(
 
 data class CategoryRow(val key: String, val name: String)
 
+/** A category as the admin sees it: hidden or not, and how many of its entries are hidden. */
+data class AdminCategory(val row: CategoryRow, val hidden: Boolean, val hiddenEntries: Int)
+
+/** An entry as the admin sees it. */
+data class AdminEntry(val itemId: String, val name: String, val hidden: Boolean)
+
 /** What a list row needs, nothing more: keeps paged memory small. */
 data class EntryRow(
     val itemId: String,
@@ -109,6 +115,8 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
             w.delete("category", "playlist_id = ?", args)
             w.delete("favourite", "playlist_id = ?", args)
             w.delete("progress", "playlist_id = ?", args)
+            w.delete("hidden_category", "playlist_id = ?", args)
+            w.delete("hidden_item", "playlist_id = ?", args)
             w.delete("playlist", "id = ?", args)
             w.setTransactionSuccessful()
         } finally {
@@ -145,13 +153,76 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
         val out = arrayListOf(CategoryRow(KEY_ALL, "All"), CategoryRow(KEY_FAV, "Favourites"))
         if (type != ContentType.LIVE) out += CategoryRow(KEY_CONTINUE, "Continue watching")
         db.readableDatabase.rawQuery(
-            "SELECT cat_id, name FROM category WHERE playlist_id = ? AND type = ? ORDER BY sort",
+            "SELECT cat_id, name FROM category c WHERE playlist_id = ? AND type = ? AND NOT EXISTS(" +
+                "SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id AND h.type = c.type " +
+                "AND h.cat_id = c.cat_id) ORDER BY sort",
             arrayOf(playlistId.toString(), type.ordinal.toString()),
         ).use { c ->
             while (c.moveToNext()) out += CategoryRow(c.getString(0), c.getString(1))
         }
         out
     }
+
+    /** Every provider category, whether it is hidden and how many of its entries are: for the admin. */
+    suspend fun categoriesForAdmin(playlistId: Long, type: ContentType): List<AdminCategory> = withContext(io) {
+        db.readableDatabase.rawQuery(
+            "SELECT cat_id, name, EXISTS(SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id " +
+                "AND h.type = c.type AND h.cat_id = c.cat_id), " +
+                "(SELECT COUNT(*) FROM hidden_item i JOIN entry e ON e.playlist_id = i.playlist_id AND e.type = i.type " +
+                "AND e.item_id = i.item_id WHERE i.playlist_id = c.playlist_id AND i.type = c.type AND e.category_id = c.cat_id) " +
+                "FROM category c WHERE playlist_id = ? AND type = ? ORDER BY sort",
+            arrayOf(playlistId.toString(), type.ordinal.toString()),
+        ).use { c ->
+            val out = ArrayList<AdminCategory>(c.count)
+            while (c.moveToNext()) out += AdminCategory(CategoryRow(c.getString(0), c.getString(1)), c.getInt(2) == 1, c.getInt(3))
+            out
+        }
+    }
+
+    /** Every entry of one category with whether it is hidden: for the admin. */
+    suspend fun entriesForAdmin(playlistId: Long, type: ContentType, catId: String): List<AdminEntry> = withContext(io) {
+        db.readableDatabase.rawQuery(
+            "SELECT item_id, name, EXISTS(SELECT 1 FROM hidden_item i WHERE i.playlist_id = e.playlist_id " +
+                "AND i.type = e.type AND i.item_id = e.item_id) FROM entry e " +
+                "WHERE playlist_id = ? AND type = ? AND category_id = ? ORDER BY sort",
+            arrayOf(playlistId.toString(), type.ordinal.toString(), catId),
+        ).use { c ->
+            val out = ArrayList<AdminEntry>(c.count)
+            while (c.moveToNext()) out += AdminEntry(c.getString(0), c.getString(1), c.getInt(2) == 1)
+            out
+        }
+    }
+
+    /** Hides or shows single entries [itemIds] of one library. */
+    suspend fun setEntriesHidden(playlistId: Long, type: ContentType, itemIds: Collection<String>, hidden: Boolean) =
+        setRows("hidden_item", "item_id", playlistId, type, itemIds, hidden)
+
+    /** Hides or shows categories [catIds] of one library. */
+    suspend fun setHidden(playlistId: Long, type: ContentType, catIds: Collection<String>, hidden: Boolean) =
+        setRows("hidden_category", "cat_id", playlistId, type, catIds, hidden)
+
+    private suspend fun setRows(table: String, column: String, playlistId: Long, type: ContentType, ids: Collection<String>, hidden: Boolean) =
+        withContext(io) {
+            val w = db.writableDatabase
+            w.beginTransaction()
+            try {
+                for (id in ids) {
+                    if (hidden) {
+                        val v = ContentValues().apply {
+                            put("playlist_id", playlistId)
+                            put("type", type.ordinal)
+                            put(column, id)
+                        }
+                        w.insertWithOnConflict(table, null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE)
+                    } else {
+                        w.delete(table, "playlist_id = ? AND type = ? AND $column = ?", arrayOf(playlistId.toString(), type.ordinal.toString(), id))
+                    }
+                }
+                w.setTransactionSuccessful()
+            } finally {
+                w.endTransaction()
+            }
+        }
 
     suspend fun count(playlistId: Long, type: ContentType, key: String): Int = withContext(io) {
         val (where, args) = filter(playlistId, type, key)
@@ -194,6 +265,9 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
             arrayOf(playlistId.toString(), type.ordinal.toString(), itemId),
         ).use { c -> if (c.moveToFirst()) c.getInt(0) else return@withContext -1 }
         val (where, args) = filter(playlistId, type, key)
+        // Not in this list (another category, or a hidden one): no position.
+        val inList = r.rawQuery("SELECT 1 FROM entry e $where AND e.item_id = ?", args + itemId).use { it.moveToFirst() }
+        if (!inList) return@withContext -1
         r.rawQuery("SELECT COUNT(*) FROM entry e $where AND e.sort < $sort", args).use { c ->
             if (c.moveToFirst()) c.getInt(0) else -1
         }
@@ -274,7 +348,18 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
         }
     }
 
+    /**
+     * WHERE clause for list [key]. Every list leaves out hidden entries and entries of hidden
+     * categories, so they don't come back through All, Favourites, Continue watching or a search.
+     */
     private fun filter(playlistId: Long, type: ContentType, key: String): Pair<String, Array<String>> {
+        val (where, args) = listFilter(playlistId, type, key)
+        return "$where AND NOT EXISTS(SELECT 1 FROM hidden_category h WHERE h.playlist_id = e.playlist_id " +
+            "AND h.type = e.type AND h.cat_id = e.category_id) AND NOT EXISTS(SELECT 1 FROM hidden_item i " +
+            "WHERE i.playlist_id = e.playlist_id AND i.type = e.type AND i.item_id = e.item_id)" to args
+    }
+
+    private fun listFilter(playlistId: Long, type: ContentType, key: String): Pair<String, Array<String>> {
         val base = arrayOf(playlistId.toString(), type.ordinal.toString())
         return when (key) {
             KEY_ALL -> "WHERE e.playlist_id = ? AND e.type = ?" to base

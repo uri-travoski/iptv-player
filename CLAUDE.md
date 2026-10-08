@@ -9,8 +9,10 @@ MVP document: https://claude.ai/code/artifact/f7b3b895-aef4-4a3d-9555-9848fd1bd0
   password) and deletion (not a parental lock: it never gates watching); launcher mode (HOME) with five
   user-chosen app slots, All apps and Android settings; Reload playlist on the home screen; a Mobile
   (touch, portrait) layout chosen on first start next to TV, switchable in App Settings (`Prefs.uiMode`;
-  `*_mobile.xml` layouts, picked in each screen), with landscape full screen on phones.
-- **Not built:** cloud/website playlist management, activation/licensing, parental PIN, hidden categories,
+  `*_mobile.xml` layouts, picked in each screen), with landscape full screen on phones; per-playlist
+  hidden categories set by an admin behind the playlist PIN (App Settings > playlist > Categories),
+  left out of every list including All, Favourites and search.
+- **Not built:** cloud/website playlist management, activation/licensing, parental PIN on watching,
   recent-channels list, multi-screen, recording, Stalker portals, PiP, USB playlist files, number-key zap.
 - No built-in content, playlists or provider links, ever.
 
