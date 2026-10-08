@@ -335,6 +335,9 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
 
         fun isSearch(key: String) = key.startsWith(SEARCH_PREFIX)
 
+        /** All, Favourites, Continue watching and search lists: not provider categories. */
+        fun isBuiltIn(key: String) = key.startsWith("\u0000")
+
         const val MIN_RESUME_MS = 30_000L
         const val END_PERCENT = 95
     }

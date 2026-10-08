@@ -10,7 +10,6 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.sardinemehico.iptvplayer.MainActivity
 import io.github.sardinemehico.iptvplayer.R
 import io.github.sardinemehico.iptvplayer.data.model.ContentType
-import io.github.sardinemehico.iptvplayer.data.repo.CategoryRow
 import io.github.sardinemehico.iptvplayer.data.repo.EntryRow
 import io.github.sardinemehico.iptvplayer.data.repo.Playlist
 import io.github.sardinemehico.iptvplayer.data.repo.Repository
@@ -40,11 +39,11 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
         layout = if (mobile) R.layout.row_category_chip else R.layout.row_category,
     )
     private val posterAdapter = PagedEntryAdapter(scope, ::onPosterClicked, R.layout.row_poster, ::toggleFavourite)
+    private val cats = CategoryList(categoryAdapter) { activity.getString(R.string.search_results, it) }
     /** TV: 5. Mobile: as many ~120dp posters as fit across (3 on most phones). */
     private val columns = if (mobile) (activity.resources.configuration.screenWidthDp / 120).coerceAtLeast(2) else COLUMNS
 
     private var playlist: Playlist? = null
-    private var categories: List<CategoryRow> = emptyList()
     private var categoryIndex = -1
     private var categoryKey = Repository.KEY_ALL
     private var count = 0
@@ -54,7 +53,7 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
     private var lastOpened = -1
     /** Favourite state set on that page, applied to the grid on return. */
     private var favChanged: Boolean? = null
-    private val searchBox = SearchBox(searchField, scope, ::onSearch, onSubmit = { focusPoster(0) })
+    private val searchBox = SearchBox(searchField, scope, ::onSearch, onSubmit = ::onSearchSubmit)
 
     init {
         root.findViewById<TextView>(R.id.title).setText(if (type == ContentType.MOVIE) R.string.movies else R.string.series)
@@ -110,8 +109,7 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
     private suspend fun load() {
         val p = graph.repo.playlist(graph.prefs.activePlaylist) ?: return
         playlist = p
-        categories = graph.repo.categories(p.id, type)
-        categoryAdapter.items = categories
+        cats.all = graph.repo.categories(p.id, type)
         selectCategory(0)
         categoriesView.post { categoriesView.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
     }
@@ -134,8 +132,9 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
     }
 
     private suspend fun selectCategory(index: Int) {
-        val cat = categories.getOrNull(index) ?: return
-        searchBox.clearQuietly()
+        val cat = cats.shown.getOrNull(index) ?: return
+        // Picking from the full list drops a half-typed search; inside search results it stays.
+        if (cats.query == null) searchBox.clearQuietly()
         categoryIndex = index
         categoryAdapter.selected = index
         showList(cat.key, cat.name)
@@ -145,22 +144,41 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
 
     private suspend fun reloadList() = showList(categoryKey, listName)
 
-    /** Search results replace the grid; clearing the field goes back to the category. */
+    /**
+     * Typing narrows the category list to a "Search: …" row (title matches, shown at once) and the
+     * categories whose name matches. Clearing the field brings back every category, at the one
+     * being browsed (or the one browsed before the search).
+     */
     private fun onSearch(query: String?) {
         scope.launch {
+            pendingCategory?.cancel()
             if (query != null) {
-                pendingCategory?.cancel()
-                lastCategory = categoryIndex.takeIf { it >= 0 } ?: lastCategory
-                categoryIndex = -1
-                categoryAdapter.selected = -1
-                showList(Repository.searchKey(query), activity.getString(R.string.search_results, query))
-            } else if (Repository.isSearch(categoryKey)) {
-                selectCategory(lastCategory)
+                if (cats.query == null) lastCategoryKey = categoryKey
+                cats.filter(query)
+                categoriesView.scrollToPosition(0)
+                selectCategory(0)
+            } else if (cats.query != null) {
+                val back = categoryKey.takeUnless { Repository.isSearch(it) } ?: lastCategoryKey
+                cats.filter(null)
+                val i = cats.indexOf(back).coerceAtLeast(0)
+                categoriesView.scrollToPosition(i)
+                selectCategory(i)
             }
         }
     }
 
-    private var lastCategory = 0
+    /** Category shown before the search started. */
+    private var lastCategoryKey: String? = null
+
+    /** Search key: to the titles found, or, if none, to the first matching category. */
+    private fun onSearchSubmit() {
+        if (count == 0 && cats.shown.size > 1) {
+            categoriesView.scrollToPosition(1)
+            categoriesView.post { categoriesView.findViewHolderForAdapterPosition(1)?.itemView?.requestFocus() }
+        } else {
+            focusPoster(0)
+        }
+    }
 
     private suspend fun showList(key: String, name: String) {
         val p = playlist ?: return

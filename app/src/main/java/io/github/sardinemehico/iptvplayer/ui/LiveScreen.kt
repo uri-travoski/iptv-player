@@ -14,7 +14,6 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.sardinemehico.iptvplayer.MainActivity
 import io.github.sardinemehico.iptvplayer.R
 import io.github.sardinemehico.iptvplayer.data.model.ContentType
-import io.github.sardinemehico.iptvplayer.data.repo.CategoryRow
 import io.github.sardinemehico.iptvplayer.data.repo.EntryRow
 import io.github.sardinemehico.iptvplayer.data.repo.Playlist
 import io.github.sardinemehico.iptvplayer.data.repo.Repository
@@ -71,12 +70,14 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         layout = if (mobile) R.layout.row_category_chip else R.layout.row_category,
     )
     private val channelAdapter = PagedEntryAdapter(scope, ::onChannelClicked, onLongClicked = ::toggleFavourite)
+    private val cats = CategoryList(categoryAdapter) { activity.getString(R.string.search_results, it) }
 
     private var playlist: Playlist? = null
     private var urls: XtreamUrls? = null
     private var liveExt = "ts"
-    private var categories: List<CategoryRow> = emptyList()
     private var categoryIndex = -1
+    /** Category the playing channel was picked from, marked in the list while it is shown there. */
+    private var playingCategoryKey: String? = null
     private var categoryKey = Repository.KEY_ALL
     private var channelCount = 0
     private var playingIndex = -1
@@ -89,7 +90,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     private var restoringFocus = false
     /** Name of the list on screen: a category, or the search. */
     private var listName = ""
-    private val searchBox = SearchBox(searchField, scope, ::onSearch, onSubmit = { focusChannel(0) })
+    private val searchBox = SearchBox(searchField, scope, ::onSearch, onSubmit = ::onSearchSubmit)
 
     private val playerListener = object : PlayerController.Listener {
         override fun onState(state: PlayerController.State) {
@@ -157,7 +158,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
             loaded = true
             scope.launch { load() }
         } else {
-            playingRow?.let { play(playingIndex, it, fromCategory = categoryAdapter.playing) }
+            playingRow?.let { play(playingIndex, it, fromCategoryKey = playingCategoryKey) }
         }
     }
 
@@ -222,11 +223,9 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
             urls = XtreamUrls(XtreamCredentials(p.url, p.username.orEmpty(), p.password.orEmpty()))
             liveExt = if (p.formats.isEmpty() || "ts" in p.formats) "ts" else "m3u8"
         }
-        categories = graph.repo.categories(p.id, ContentType.LIVE)
-        categoryAdapter.items = categories
+        cats.all = graph.repo.categories(p.id, ContentType.LIVE)
 
-        val lastKey = graph.prefs.lastLiveCategory
-        val startIndex = categories.indexOfFirst { it.key == lastKey }.takeIf { it >= 0 } ?: 0
+        val startIndex = cats.indexOf(graph.prefs.lastLiveCategory).coerceAtLeast(0)
         selectCategory(startIndex)
 
         // Restore the last channel and play it in the preview.
@@ -261,25 +260,50 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     }
 
     private suspend fun selectCategory(index: Int) {
-        val cat = categories.getOrNull(index) ?: return
-        searchBox.clearQuietly()
+        val cat = cats.shown.getOrNull(index) ?: return
+        // Picking from the full list drops a half-typed search; inside search results it stays.
+        if (cats.query == null) searchBox.clearQuietly()
         categoryIndex = index
         categoryAdapter.selected = index
         showList(cat.key, cat.name)
     }
 
-    /** Search results replace the channel list; clearing the field goes back to the last category. */
+    /**
+     * Typing narrows the category list to a "Search: …" row (channel names, shown at once) and the
+     * categories whose name matches. Clearing the field brings back every category, at the one
+     * being browsed (or the last one played from).
+     */
     private fun onSearch(query: String?) {
         scope.launch {
+            pendingCategory?.cancel()
             if (query != null) {
-                pendingCategory?.cancel()
-                categoryIndex = -1
-                categoryAdapter.selected = -1
-                showList(Repository.searchKey(query), activity.getString(R.string.search_results, query))
-            } else if (Repository.isSearch(categoryKey)) {
-                selectCategory(categories.indexOfFirst { it.key == graph.prefs.lastLiveCategory }.coerceAtLeast(0))
+                cats.filter(query)
+                markPlayingCategory()
+                categoriesView.scrollToPosition(0)
+                selectCategory(0)
+            } else if (cats.query != null) {
+                val back = categoryKey.takeUnless { Repository.isSearch(it) } ?: graph.prefs.lastLiveCategory
+                cats.filter(null)
+                markPlayingCategory()
+                val i = cats.indexOf(back).coerceAtLeast(0)
+                categoriesView.scrollToPosition(i)
+                selectCategory(i)
             }
         }
+    }
+
+    /** Search key: to the channels found, or, if none, to the first matching category. */
+    private fun onSearchSubmit() {
+        if (channelCount == 0 && cats.shown.size > 1) focusCategory(1) else focusChannel(0)
+    }
+
+    private fun focusCategory(index: Int) {
+        categoriesView.scrollToPosition(index)
+        categoriesView.post { categoriesView.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
+    }
+
+    private fun markPlayingCategory() {
+        categoryAdapter.playing = cats.indexOf(playingCategoryKey)
     }
 
     private suspend fun showList(key: String, name: String) {
@@ -330,13 +354,14 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         }
     }
 
-    /** [fromCategory]: the category list [index] belongs to (the shown one, unless replaying). */
-    private fun play(index: Int, row: EntryRow, fromCategory: Int = categoryIndex) {
+    /** [fromCategoryKey]: the list [index] belongs to (the shown one, unless replaying). */
+    private fun play(index: Int, row: EntryRow, fromCategoryKey: String? = categoryKey) {
         val url = row.streamUrl ?: urls?.live(row.itemId, liveExt) ?: return
         playingIndex = index
         playingRow = row
-        // Mark the category this channel was picked from (none for search results).
-        categoryAdapter.playing = fromCategory
+        // Mark the category this channel was picked from.
+        playingCategoryKey = fromCategoryKey
+        markPlayingCategory()
         channelAdapter.playingItemId = row.itemId
         nowName.text = row.name
         graph.player.play(url)

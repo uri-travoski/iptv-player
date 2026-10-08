@@ -13,8 +13,47 @@ import coil3.request.placeholder
 import io.github.sardinemehico.iptvplayer.R
 import io.github.sardinemehico.iptvplayer.data.repo.CategoryRow
 import io.github.sardinemehico.iptvplayer.data.repo.EntryRow
+import io.github.sardinemehico.iptvplayer.data.repo.Repository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+
+/**
+ * The category list beside a library, narrowed while a search is typed: a "Search: …" row (the
+ * name matches) followed by the provider categories whose name contains the text, so a search
+ * for "cricket" also finds the CRICKET category. Few rows, so it filters in memory.
+ */
+class CategoryList(private val adapter: CategoryAdapter, private val searchLabel: (String) -> String) {
+
+    /** Every category, as loaded. Setting it clears any filter. */
+    var all: List<CategoryRow> = emptyList()
+        set(value) {
+            field = value
+            filter(null)
+        }
+
+    /** What the list shows now; adapter positions index into this. */
+    var shown: List<CategoryRow> = emptyList()
+        private set
+
+    /** The search text the list is narrowed to, or null. */
+    var query: String? = null
+        private set
+
+    fun filter(text: String?) {
+        query = text
+        shown = if (text == null) {
+            all
+        } else {
+            listOf(CategoryRow(Repository.searchKey(text), searchLabel(text))) +
+                all.filter { !Repository.isBuiltIn(it.key) && it.name.contains(text, ignoreCase = true) }
+        }
+        adapter.selected = -1
+        adapter.playing = -1
+        adapter.items = shown
+    }
+
+    fun indexOf(key: String?): Int = if (key == null) -1 else shown.indexOfFirst { it.key == key }
+}
 
 /**
  * Categories are few (tens to hundreds), so they are held in memory. [layout]: a TV list row, or
@@ -199,7 +238,32 @@ class PagedEntryAdapter(
             loading -= page
             pages[page] = rows
             evictAround(page)
-            notifyItemRangeChanged(page * PAGE, rows.size)
+            notifyRows(page * PAGE, rows.size)
+        }
+    }
+
+    private var recycler: RecyclerView? = null
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        recycler = recyclerView
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        recycler = null
+    }
+
+    /**
+     * A page can arrive while the list is in the middle of a layout pass (seen when a category is
+     * tapped while Live TV is still loading): RecyclerView forbids changes then and crashes, so
+     * the update waits for the next frame.
+     */
+    private fun notifyRows(start: Int, count: Int) {
+        val rv = recycler
+        if (rv != null && rv.isComputingLayout) {
+            val gen = generation
+            rv.post { if (gen == generation) notifyItemRangeChanged(start, count) }
+        } else {
+            notifyItemRangeChanged(start, count)
         }
     }
 
