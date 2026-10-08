@@ -92,6 +92,23 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
                 PRIMARY KEY (playlist_id, type, cat_id)
             )""",
         )
+        // What the admin chose to show by hand: adult auto-hiding (on every load) leaves these alone.
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS shown_category (
+                playlist_id INTEGER NOT NULL,
+                type INTEGER NOT NULL,
+                cat_id TEXT NOT NULL,
+                PRIMARY KEY (playlist_id, type, cat_id)
+            )""",
+        )
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS shown_item (
+                playlist_id INTEGER NOT NULL,
+                type INTEGER NOT NULL,
+                item_id TEXT NOT NULL,
+                PRIMARY KEY (playlist_id, type, item_id)
+            )""",
+        )
         db.execSQL(
             """CREATE TABLE IF NOT EXISTS hidden_item (
                 playlist_id INTEGER NOT NULL,
@@ -124,10 +141,10 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) db.execSQL("ALTER TABLE playlist ADD COLUMN pin_hash TEXT")
         if (oldVersion < 3) createProgress(db)
-        if (oldVersion < 4) createHiddenCategories(db)
+        if (oldVersion < 5) createHiddenCategories(db) // v4 had the hidden tables; v5 adds the shown ones
     }
 
     companion object {
-        const val VERSION = 4
+        const val VERSION = 5
     }
 }

@@ -68,7 +68,7 @@ class CategoriesScreen(
         show(type) // also after coming back from a category: its hidden count may have changed
     }
 
-    private fun show(t: ContentType) {
+    private fun show(t: ContentType, focusAt: Int = -1) {
         type = t
         tabs.forEach { (k, v) -> v.isActivated = k == t }
         scope.launch {
@@ -81,6 +81,10 @@ class CategoriesScreen(
                 graph.repo.entriesForAdmin(playlist.id, t, category.key).map { Row(it.itemId, it.name, it.hidden) }
             }
             updateSummary()
+            if (focusAt >= 0) {
+                list.scrollToPosition(focusAt)
+                list.post { list.findViewHolderForAdapterPosition(focusAt)?.itemView?.requestFocus() }
+            }
             if (!loadedOnce) {
                 loadedOnce = true
                 if (category == null) tabs.getValue(t).requestFocus() else list.post { list.getChildAt(0)?.requestFocus() }
@@ -97,6 +101,10 @@ class CategoriesScreen(
         val row = adapter.rows.getOrNull(position) ?: return
         scope.launch {
             save(listOf(row.id), !row.hidden)
+            if (category == null && row.hidden) {
+                show(type, focusAt = position) // shown whole: refresh the "(N hidden)" notes, focus stays put
+                return@launch
+            }
             row.hidden = !row.hidden
             adapter.notifyItemChanged(position)
             updateSummary()

@@ -178,6 +178,11 @@ class Prefs(private val sp: SharedPreferences) {
         get() = sp.getInt("dns_mode", AppDns.MODE_SYSTEM)
         set(v) = sp.edit().putInt("dns_mode", v).apply()
 
+    /** AdultNames.VERSION the playlists were last scanned with (0 = never). */
+    var adultScanVersion: Int
+        get() = sp.getInt("adult_scan_version", 0)
+        set(v) = sp.edit().putInt("adult_scan_version", v).apply()
+
     /** PlayerView resize mode (AspectRatioFrameLayout.RESIZE_MODE_*), 0 = fit. */
     var resizeMode: Int
         get() = sp.getInt("resize_mode", 0)

@@ -62,6 +62,16 @@ class Syncer(
 
     suspend fun sync(p: Playlist, progress: (String) -> Unit) {
         if (p.isXtream) syncXtream(p, progress) else syncM3u(p, progress)
+        // New adult categories/entries are hidden on every load; the admin's own choices stay.
+        progress("Checking for adult content…")
+        try {
+            repo.autoHideAdult(p.id)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Never fail a load over this; the admin can still hide things by hand.
+            android.util.Log.w("WorldTV", "adult auto-hide failed", e)
+        }
     }
 
     private suspend fun syncXtream(p: Playlist, progress: (String) -> Unit) = withContext(io) {

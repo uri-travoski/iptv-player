@@ -26,7 +26,7 @@
     <string name="categories_show_all">Show all</string>
     <string name="categories_hide_all">Hide all</string>
     <string name="categories_hide_adult">Hide adult</string>
-    <string name="categories_adult_note">“Hide adult” goes by name only: it hides categories whose names contain words like Adult, XXX, 18+ or Porn. Anything named differently is not caught, so check the list yourself.</string>
+    <string name="categories_adult_note">Adult content is hidden automatically every time the playlist loads or refreshes. This goes by name only: categories and channels named with words like Adult, XXX, 18+, Porn or adult studio names. Anything named differently is not caught, so check the list yourself. What you show or hide here yourself stays that way after every reload.</string>
     <string name="categories_summary">%1$d of %2$d shown</string>
     <plurals name="categories_adult_hidden">
         <item quantity="one">%1$d adult category hidden</item>

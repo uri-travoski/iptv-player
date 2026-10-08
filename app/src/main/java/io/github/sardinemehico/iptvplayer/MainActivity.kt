@@ -28,6 +28,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
+import io.github.sardinemehico.iptvplayer.data.source.AdultNames
 import io.github.sardinemehico.iptvplayer.ui.AddPlaylistScreen
 import io.github.sardinemehico.iptvplayer.ui.HomeScreen
 import io.github.sardinemehico.iptvplayer.ui.PlaylistsScreen
@@ -93,6 +94,7 @@ class MainActivity : ComponentActivity() {
         })
 
         lifecycleScope.launch { route() }
+        lifecycleScope.launch { scanForAdult() }
         logStartup()
     }
 
@@ -152,6 +154,23 @@ class MainActivity : ComponentActivity() {
             bars.hide(WindowInsetsCompat.Type.systemBars())
         } else {
             bars.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    /**
+     * Once per word-list version: hide adult content in playlists loaded before this check
+     * existed (or before the list last changed). Loads and refreshes do it themselves.
+     */
+    private suspend fun scanForAdult() {
+        val graph = App.graph
+        if (graph.prefs.adultScanVersion >= AdultNames.VERSION) return
+        try {
+            graph.repo.playlists().forEach { graph.repo.autoHideAdult(it.id) }
+            graph.prefs.adultScanVersion = AdultNames.VERSION
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("WorldTV", "adult scan failed", e) // never crash at start over this; retried next start
         }
     }
 
