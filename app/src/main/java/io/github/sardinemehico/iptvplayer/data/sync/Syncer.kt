@@ -8,6 +8,7 @@ import io.github.sardinemehico.iptvplayer.data.model.ContentType
 import io.github.sardinemehico.iptvplayer.data.model.Entry
 import io.github.sardinemehico.iptvplayer.data.repo.Playlist
 import io.github.sardinemehico.iptvplayer.data.repo.Repository
+import io.github.sardinemehico.iptvplayer.data.source.AdultNames
 import io.github.sardinemehico.iptvplayer.data.source.Episode
 import io.github.sardinemehico.iptvplayer.data.source.M3uParser
 import io.github.sardinemehico.iptvplayer.data.source.VodInfo
@@ -34,6 +35,8 @@ class Syncer(
     private val db: Db,
     private val repo: Repository,
     private val io: CoroutineDispatcher,
+    /** The admin's adult word lists, read at the end of each load. */
+    private val adultNames: () -> AdultNames,
 ) {
 
     /** Checks an Xtream login without touching the database. */
@@ -65,7 +68,7 @@ class Syncer(
         // New adult categories/entries are hidden on every load; the admin's own choices stay.
         progress("Checking for adult content…")
         try {
-            repo.autoHideAdult(p.id)
+            repo.autoHideAdult(p.id, adultNames())
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -224,6 +227,7 @@ class Syncer(
         s.bindNullable(12, e.plot)
         s.bindLong(13, e.added)
         s.bindLong(14, e.order.toLong())
+        s.bindLong(15, if (e.adult) 1 else 0)
         s.executeInsert()
     }
 
@@ -248,6 +252,6 @@ class Syncer(
 
         private const val INSERT_ENTRY =
             """INSERT OR REPLACE INTO entry(playlist_id, type, item_id, name, category_id, logo, stream_url,
-               epg_id, catchup_days, ext, rating, plot, added, sort) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+               epg_id, catchup_days, ext, rating, plot, added, sort, adult) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
     }
 }

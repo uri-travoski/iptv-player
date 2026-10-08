@@ -82,6 +82,15 @@ class XtreamParserTest {
     }
 
     @Test
+    fun readsTheAdultFlag() {
+        val live = ArrayList<Entry>()
+        XtreamParser.parseLiveStreams(
+            StringReader("""[{"stream_id":1,"name":"A","is_adult":"1"},{"stream_id":2,"name":"B","is_adult":0},{"stream_id":3,"name":"C"},{"stream_id":4,"name":"D","is_adult":1}]"""),
+        ) { live += it }
+        assertEquals(listOf(true, false, false, true), live.map { it.adult })
+    }
+
+    @Test
     fun parsesVodAndSeries() {
         val vod = ArrayList<Entry>()
         XtreamParser.parseVodStreams(

@@ -7,12 +7,14 @@ import org.junit.Test
 /** Real names from provider catalogues (Oct 2026). */
 class AdultNamesTest {
 
+    private val names = AdultNames.DEFAULT
+
     @Test
     fun adultCategories() {
         listOf(
             "|+18| ✪ ADULTS", "XXX | ✪ FOR ADULTS Brazzers", "|+18| ✪ HANIME TV", "FOR Adults", "ULLU 18+",
             "ATRANGII 18+", "XXX | ✪ FOR FREE PORNIVEOS", "Philippines Movies (18+)",
-        ).forEach { assertTrue(it, AdultNames.isAdultCategory(it)) }
+        ).forEach { assertTrue(it, names.isAdultCategory(it)) }
     }
 
     @Test
@@ -20,7 +22,7 @@ class AdultNamesTest {
         listOf(
             "Adult Swim", "SPORTS | CRICKET", "|EN| ✪ COMEDY", "AFRICA | CARIBBEAN", "EUROPE | RUSSIA", "Essex & Sussex",
             "UK | ENTERTAINMENT", "Kids",
-        ).forEach { assertFalse(it, AdultNames.isAdultCategory(it)) }
+        ).forEach { assertFalse(it, names.isAdultCategory(it)) }
     }
 
     @Test
@@ -29,7 +31,7 @@ class AdultNamesTest {
             "Carib HustlerTV", "Carib PlayboyTV", "Carib Fab Anal", "Carib RedLight", "RU: Для Взрослых, Blue Hustler,Blue Hustler",
             "RU: Для Взрослых, Babes TV HD,Babes TV HD", "Brazzers TV Europe", "Horny MILF fucked hard", "XXX | Some Scene",
             "Busty Babe Gets Creampie",
-        ).forEach { assertTrue(it, AdultNames.isAdultEntry(it)) }
+        ).forEach { assertTrue(it, names.isAdultEntry(it)) }
     }
 
     @Test
@@ -43,6 +45,23 @@ class AdultNamesTest {
             "Sex, Uncut – L’amore e il sesso fuori copione-it", "Никто.не.знает.про.секс.2006.1080p", "Canal+ Sport",
             "Essex County News", "Analysis of the Game", "Adult Swim", "Pussy Riot: A Punk Prayer (2013)", "The Penthouse (2021) S02",
             "Attack of the 50 Foot Camgirl - 2022", "Hücum (2013)",
-        ).forEach { assertFalse(it, AdultNames.isAdultEntry(it)) }
+        ).forEach { assertFalse(it, names.isAdultEntry(it)) }
+    }
+
+    @Test
+    fun adminWords() {
+        val custom = AdultNames(listOf("vip 2"), listOf("red lips", "babes tv", "hotclub*"))
+        assertTrue(custom.isAdultCategory("VIP 2"))
+        assertTrue(custom.isAdultCategory("VIP2"))
+        assertFalse(custom.isAdultCategory("VIP 22"))
+        assertTrue(custom.isAdultEntry("RU: Red Lips"))
+        assertTrue(custom.isAdultEntry("REDLIPS HD"))
+        assertFalse(custom.isAdultEntry("Red Lipstick Show"))
+        assertTrue(custom.isAdultEntry("BabesTV HD"))
+        assertTrue(custom.isAdultEntry("HotClubXL"))
+        assertFalse(custom.isAdultEntry("The Hot Club"))
+        // A removed default word no longer hides on its own.
+        assertFalse(AdultNames(emptyList(), emptyList()).isAdultEntry("Carib Fab Anal"))
+        assertFalse(AdultNames(emptyList(), emptyList()).isAdultCategory("FOR Adults"))
     }
 }

@@ -59,6 +59,7 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
             }
         }
         add.setOnClickListener { activity.push(AddPlaylistScreen(activity)) }
+        root.findViewById<View>(R.id.help).setOnClickListener { activity.push(HelpScreen(activity)) }
         autoStart.setOnClickListener { toggleAutoStart() }
         val slotCount = root.findViewById<TextView>(R.id.slot_count)
         fun showSlotCount() { slotCount.text = activity.getString(R.string.slot_count, graph.prefs.appSlotCount) }

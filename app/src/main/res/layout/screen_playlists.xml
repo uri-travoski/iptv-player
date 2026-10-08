@@ -33,6 +33,15 @@
             android:layout_marginTop="16dp"
             android:gravity="center_vertical|start" />
 
+        <!-- How everything works and how to set it up. -->
+        <TextView
+            android:id="@+id/help"
+            style="@style/TileButton"
+            android:layout_width="match_parent"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/help" />
+
         <TextView
             android:id="@+id/auto_start"
             style="@style/TileButton"

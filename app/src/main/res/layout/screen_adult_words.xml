@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Admin: the adult words that hide categories and channels. Behind the playlist PIN. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:id="@+id/form"
+        android:layout_width="640dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingTop="24dp"
+        android:paddingBottom="16dp">
+
+        <TextView
+            style="@style/Text.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/adult_words_title"
+            android:textSize="24sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <TextView android:id="@+id/tab_categories" style="@style/TileButton" android:layout_width="0dp" android:layout_weight="1" android:text="@string/adult_words_categories" android:textSize="16sp" />
+            <TextView android:id="@+id/tab_entries" style="@style/TileButton" android:layout_width="0dp" android:layout_marginStart="10dp" android:layout_weight="1" android:text="@string/adult_words_entries" android:textSize="16sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/help"
+            style="@style/Text.Secondary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:textSize="14sp" />
+
+        <TextView
+            style="@style/Text.Secondary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/adult_words_rules"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/word"
+                style="@style/Input"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:hint="@string/adult_words_hint"
+                android:imeOptions="actionDone|flagNoExtractUi"
+                android:importantForAutofill="no"
+                android:inputType="text|textNoSuggestions" />
+
+            <TextView android:id="@+id/add" style="@style/TileButton" android:layout_width="wrap_content" android:layout_marginStart="10dp" android:layout_marginTop="12dp" android:text="@string/adult_words_add" />
+            <TextView android:id="@+id/restore" style="@style/TileButton" android:layout_width="wrap_content" android:layout_marginStart="10dp" android:layout_marginTop="12dp" android:text="@string/adult_words_restore" android:textSize="16sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/count"
+            style="@style/Text.Secondary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="14sp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/list"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="6dp"
+            android:layout_weight="1"
+            android:scrollbars="vertical" />
+    </LinearLayout>
+</FrameLayout>

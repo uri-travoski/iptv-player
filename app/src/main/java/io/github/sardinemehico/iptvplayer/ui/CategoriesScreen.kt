@@ -47,7 +47,7 @@ class CategoriesScreen(
         if (category == null) {
             title.text = activity.getString(R.string.categories_title, playlist.name)
             tabs.forEach { (t, v) -> v.setOnClickListener { show(t) } }
-            root.findViewById<View>(R.id.hide_adult).setOnClickListener { hideAdult() }
+            root.findViewById<View>(R.id.hide_adult).setOnClickListener { activity.push(AdultWordsScreen(activity)) }
         } else {
             title.text = category.name
             (tabs.getValue(ContentType.LIVE).parent as View).visibility = View.GONE
@@ -123,18 +123,6 @@ class CategoriesScreen(
         }
     }
 
-    private fun hideAdult() {
-        val adult = adapter.rows.filter { !it.hidden && isAdult(it.name) }
-        scope.launch {
-            save(adult.map { it.id }, true)
-            activity.toast(
-                if (adult.isEmpty()) activity.getString(R.string.categories_adult_none)
-                else activity.resources.getQuantityString(R.plurals.categories_adult_hidden, adult.size, adult.size),
-            )
-            show(type)
-        }
-    }
-
     private fun updateSummary() {
         val rows = adapter.rows
         summary.text = activity.getString(R.string.categories_summary, rows.count { !it.hidden }, rows.size)
@@ -176,15 +164,5 @@ class CategoriesScreen(
                 }
             }
         }
-    }
-
-    private companion object {
-        /** Category names that usually mean adult content, matched case-insensitively. */
-        val ADULT = Regex("""\b(xxx|adults?|porn\w*|sex\w*|erotic\w*|playboy|hustler|brazzers|red\s*light)\b|18\s*\+|\+\s*18""", RegexOption.IGNORE_CASE)
-
-        /** Names that contain those words but aren't adult content. */
-        val NOT_ADULT = Regex("""adult\s*swim""", RegexOption.IGNORE_CASE)
-
-        fun isAdult(name: String) = ADULT.containsMatchIn(name) && !NOT_ADULT.containsMatchIn(name)
     }
 }

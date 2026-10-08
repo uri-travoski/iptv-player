@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App Settings > Help: sections built in HelpScreen. The scroll view takes focus, so Up/Down scroll. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ScrollView
+        android:id="@+id/form"
+        android:layout_width="720dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="center_horizontal"
+        android:clipToPadding="false"
+        android:defaultFocusHighlightEnabled="false"
+        tools:targetApi="o"
+        android:focusable="true"
+        android:paddingTop="24dp"
+        android:paddingBottom="32dp"
+        android:scrollbars="vertical">
+
+        <LinearLayout
+            android:id="@+id/sections"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/Text.Title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/help_title"
+                android:textSize="24sp" />
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

@@ -35,4 +35,6 @@ data class Entry(
     val added: Long = 0,
     /** Position in the provider's list, used as the default sort order. */
     val order: Int = 0,
+    /** The provider marks it adult (Xtream `is_adult`). Hidden by default. */
+    val adult: Boolean = false,
 )

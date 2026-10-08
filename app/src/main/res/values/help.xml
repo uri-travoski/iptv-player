@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App Settings > Help. One heading per entry in help_titles, its text at the same index in help_bodies. -->
+<resources>
+    <string name="help">Help</string>
+    <string name="help_title">Help: how WorldTV works</string>
+
+    <string-array name="help_titles">
+        <item>1. First setup</item>
+        <item>2. TV or Mobile layout</item>
+        <item>3. Adding a playlist</item>
+        <item>4. Home screen</item>
+        <item>5. Live TV</item>
+        <item>6. Movies and Series</item>
+        <item>7. Search</item>
+        <item>8. Favourites and Continue watching</item>
+        <item>9. Player controls</item>
+        <item>10. Managing playlists</item>
+        <item>11. PIN (admin access)</item>
+        <item>12. Showing and hiding categories and channels</item>
+        <item>13. Adult content filter</item>
+        <item>14. Adult words</item>
+        <item>15. Other settings</item>
+        <item>16. Updates</item>
+        <item>17. Troubleshooting</item>
+    </string-array>
+
+    <string-array name="help_bodies">
+        <item>• On first start, choose TV (TV box with a remote) or Mobile (phone or tablet with touch).\n• Add your playlist (section 3). WorldTV has no channels of its own: everything comes from your IPTV provider.\n• As admin: open App Settings, then long-press the playlist (or press Menu), then Categories (show / hide). Enter the PIN (000000 unless you changed it) and check which categories are shown. Adult content is already hidden (sections 13 and 14).\n• Change the PIN to your own (section 11), so others can\'t undo your choices.</item>
+        <item>• TV: big tiles and lists for the remote. Up / Down / Left / Right move, OK selects, Back goes back, Menu opens extra options.\n• Mobile: portrait screens for touch. Tap selects, long-press works like Menu. Full screen video turns the phone to landscape.\n• Change it any time: App Settings > Layout (the first button).</item>
+        <item>• App Settings > Add playlist.\n• Xtream Codes: enter the server address (e.g. http://example.com:8080), username and password from your provider.\n• M3U URL: paste the playlist link. If it is an Xtream link (get.php?username=…), WorldTV signs in with Xtream automatically, which is faster.\n• PIN: leave empty to use 000000, or enter your own 6 digits.\n• Save and load downloads all channels, movies and series. Big playlists take a while (up to several minutes on a slow box); the screen stays on until the home screen appears.\n• Adult content is hidden from this first load on.</item>
+        <item>• Live TV, Movies and Series open the libraries of the active playlist.\n• The line under the title shows the playlist, when the account expires and how many connections it allows.\n• Reload playlist downloads everything again (new channels, removed ones, new adult content to hide). Favourites, Continue watching and your show/hide choices are kept.\n• TV layout: app slots (Add app) start other apps; long-press or Menu on a slot to change or remove it. All apps and System settings are on the right.</item>
+        <item>• Categories on the left, channels in the middle, a preview on the right (on Mobile: preview on top, categories in a sideways strip).\n• OK (tap) on a channel plays it in the preview; OK again goes full screen.\n• Full screen: Up / Down or CH+ / CH- change channel, OK shows the controls, Back steps back.\n• Menu (long-press) on a channel adds or removes it from Favourites.\n• WorldTV remembers the last category and channel.</item>
+        <item>• Categories on the left, posters on the right. OK opens a title.\n• Movies: Play (or Resume / From start if you watched part of it). Series: choose a season, then an episode.\n• Menu (long-press) on a poster adds or removes a favourite.</item>
+        <item>• The Search box is at the top of every category list.\n• It finds channel and title names, and also categories: searching "cricket" shows a "Search: cricket" row (matching channels) and every category with cricket in its name.\n• Pick any of them to browse it. Clear the box to get the full category list back.\n• On TV, the keyboard\'s Search key jumps to the results (or to the first matching category).</item>
+        <item>• Favourites is a category at the top of each library: add with Menu (long-press) on a channel or poster, or with the star in the Live TV player.\n• Continue watching (Movies and Series) lists what you stopped part-way, newest first.</item>
+        <item>• OK (tap) shows the controls; they hide by themselves after a few seconds.\n• The focused button\'s name appears above it (on touch: long-press a button).\n• Buttons: audio track, subtitles, previous / next (channel or episode), back 10 s, play / pause, forward 30 s, picture (Fit → Stretch → Zoom), and Open in… (another player, for streams WorldTV can\'t play).\n• Movies and episodes: Left / Right seek when the controls are hidden; on touch, drag the bar.\n• Mobile: the arrow top left leaves full screen.</item>
+        <item>• App Settings lists your playlists; the active one is marked. OK (tap) opens a playlist.\n• Long-press or Menu on a playlist: Open, Refresh, Details, Categories (show / hide), Delete.\n• Details (server, username, password, PIN), Categories and Delete need the playlist\'s PIN.\n• Add as many playlists as you like and switch between them here.</item>
+        <item>• Every playlist has a 6-digit PIN. It starts as 000000.\n• Change it: long-press the playlist > Details > enter the PIN > Change PIN. "Reset to 000000" puts the default back.\n• The PIN protects the login details, the show/hide choices, the adult words and deleting the playlist. It does not lock watching.\n• After 5 wrong PINs, entry is blocked for 30 seconds.\n• Note: adding a playlist again from Add playlist is not PIN-protected.</item>
+        <item>• Long-press the playlist > Categories (show / hide) > PIN.\n• Tabs: Live TV, Movies, Series. ✓ = shown, ✕ = hidden.\n• OK (tap) on a category shows or hides the whole category.\n• Menu (long-press) on a category opens its channels / titles: OK shows or hides each one. A category with some hidden inside shows "(N hidden)".\n• Show all / Hide all apply to the whole tab (or category).\n• Hidden means gone everywhere: the category list, All, Favourites, Continue watching, search and changing channel.\n• Your choices are kept on every reload and refresh. Showing a category shows all of it.</item>
+        <item>• WorldTV hides adult content automatically, every time a playlist loads, reloads or refreshes (new adult channels included).\n• It hides: categories whose names contain category words (XXX, Adult, 18+, Porn…), channels and titles with channel words (studio names, explicit terms…), and anything the provider itself marks as adult.\n• Words also used in normal titles (sex, porn, fuck, milf…) only hide a channel when two different ones appear together, so films like "Sex Education" or "xXx" stay.\n• It goes by name only: anything with an innocent name is not caught. Check the category list yourself.\n• What you show or hide by hand always wins, after every reload.</item>
+        <item>• Categories screen > Adult words (PIN needed). The lists apply to every playlist.\n• Two tabs: Category words (one word hides a category) and Channel and title words (one word hides a channel, movie or series).\n• Add: type the word, then Add. Remove: OK (tap) on a word.\n• Whole words only, any case. Spaces match any spacing ("playboy tv" also finds "PlayboyTV"). A * at the end matches any ending ("porn*" finds "porno").\n• Restore defaults puts back the built-in list.\n• When you leave the screen, every playlist is checked again: new words hide more; a removed word shows again what only it was hiding.</item>
+        <item>• Auto-start on boot: opens WorldTV when the box starts (some boxes need "display over other apps" allowed).\n• Home screen app slots: how many app slots the home screen shows (Left / Right to change).\n• DNS: Box default, or Cloudflare / Google encrypted DNS if your provider\'s server can\'t be found.\n• Make WorldTV the Home screen: WorldTV opens instead of the box\'s own launcher. All apps and System settings give you the way out.</item>
+        <item>• Check for updates on start: WorldTV looks for a new version when it starts and offers to install it. Check now looks straight away.\n• The first update may ask to allow "install unknown apps" for WorldTV.</item>
+        <item>• Channel doesn\'t play: try another channel. Event channels (sports, PPV) only play during the event. Try Open in… with another player.\n• "This stream is not available": the provider\'s server isn\'t sending it, or your account is in use on another device (most accounts allow 1 connection at a time).\n• Buffering: the provider\'s server is slow or far away; try another server/playlist, or the DNS setting.\n• Nothing loads / sign-in fails: check the server address, username and password, and the expiry date on the home screen.\n• A playlist takes long to load: big catalogues (hundreds of thousands of titles) are slow on small boxes; let it finish.\n• Something is hidden that shouldn\'t be (or the other way round): App Settings > playlist > Categories, or Adult words.</item>
+    </string-array>
+</resources>

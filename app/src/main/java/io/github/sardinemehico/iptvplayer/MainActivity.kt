@@ -165,7 +165,9 @@ class MainActivity : ComponentActivity() {
         val graph = App.graph
         if (graph.prefs.adultScanVersion >= AdultNames.VERSION) return
         try {
-            graph.repo.playlists().forEach { graph.repo.autoHideAdult(it.id) }
+            // From version 1 (before hides were marked automatic): adopt the rows the rules explain.
+            val adopt = graph.prefs.adultScanVersion == 1
+            graph.repo.playlists().forEach { graph.repo.autoHideAdult(it.id, graph.adultNames(), adopt) }
             graph.prefs.adultScanVersion = AdultNames.VERSION
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e

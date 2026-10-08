@@ -96,14 +96,14 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
             put("url", url)
             put("username", username)
             put("password", password)
-            put("pin_hash", pinHash)
+            put("pin_hash", pinHash ?: Pin.hash(Pin.DEFAULT))
         }
         db.writableDatabase.insertOrThrow("playlist", null, v)
     }
 
-    /** Sets or (with null) removes a playlist's PIN. */
+    /** Sets a playlist's PIN; null puts back the default 000000 (every playlist has a PIN). */
     suspend fun setPin(id: Long, pinHash: String?) = withContext(io) {
-        val v = ContentValues().apply { put("pin_hash", pinHash) }
+        val v = ContentValues().apply { put("pin_hash", pinHash ?: Pin.hash(Pin.DEFAULT)) }
         db.writableDatabase.update("playlist", v, "id = ?", arrayOf(id.toString()))
     }
 
@@ -201,34 +201,46 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
         setRows("hidden_item", "shown_item", "item_id", playlistId, type, itemIds, hidden)
 
     /**
-     * Hides adult categories and entries by name ([AdultNames]), except what the admin chose to
-     * show. Runs after every load and refresh, so new ones are hidden too; already hidden rows
-     * and the admin's choices are left as they are. Entries inside a hidden category are skipped.
+     * Hides adult categories and entries: names matching [names] (the admin's word lists) and
+     * entries the provider flags `is_adult`. Runs after every load and refresh, and when the word
+     * lists change. Automatic hides are worked out again each time (so removing a word un-hides
+     * what only it hid); the admin's own choices, shown or hidden, are never touched. Entries in
+     * a hidden category, or in one the admin showed by hand, are skipped.
+     *
+     * [adopt]: once, after the update that added the `auto` flag: rows hidden before it that the
+     * rules explain become automatic; the rest stay as hand-made hides.
      */
-    suspend fun autoHideAdult(playlistId: Long) = withContext(io) {
+    suspend fun autoHideAdult(playlistId: Long, names: AdultNames, adopt: Boolean = false) = withContext(io) {
         val w = db.writableDatabase
+        val pl = playlistId.toString()
         w.beginTransaction()
         try {
+            if (adopt) adoptHidden(w, playlistId, names)
+            w.delete("hidden_category", "playlist_id = ? AND auto = 1", arrayOf(pl))
+            w.delete("hidden_item", "playlist_id = ? AND auto = 1", arrayOf(pl))
             for (type in ContentType.values()) {
-                val args = arrayOf(playlistId.toString(), type.ordinal.toString())
+                val args = arrayOf(pl, type.ordinal.toString())
                 val cats = ArrayList<String>()
                 w.rawQuery(
                     "SELECT cat_id, name FROM category c WHERE playlist_id = ? AND type = ? " +
-                        "AND NOT EXISTS(SELECT 1 FROM shown_category s WHERE s.playlist_id = c.playlist_id AND s.type = c.type AND s.cat_id = c.cat_id)",
+                        "AND NOT EXISTS(SELECT 1 FROM shown_category s WHERE s.playlist_id = c.playlist_id AND s.type = c.type AND s.cat_id = c.cat_id) " +
+                        "AND NOT EXISTS(SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id AND h.type = c.type AND h.cat_id = c.cat_id)",
                     args,
-                ).use { c -> while (c.moveToNext()) if (AdultNames.isAdultCategory(c.getString(1))) cats += c.getString(0) }
-                insertIgnore(w, "hidden_category", "cat_id", playlistId, type, cats)
+                ).use { c -> while (c.moveToNext()) if (names.isAdultCategory(c.getString(1))) cats += c.getString(0) }
+                insertHidden(w, "hidden_category", "cat_id", playlistId, type, cats, auto = true)
                 val items = ArrayList<String>()
                 w.rawQuery(
-                    "SELECT item_id, name FROM entry e WHERE playlist_id = ? AND type = ? " +
+                    "SELECT item_id, name, adult FROM entry e WHERE playlist_id = ? AND type = ? " +
                         "AND NOT EXISTS(SELECT 1 FROM hidden_category h WHERE h.playlist_id = e.playlist_id AND h.type = e.type AND h.cat_id = e.category_id) " +
                         // A category the admin showed by hand is shown whole.
                         "AND NOT EXISTS(SELECT 1 FROM shown_category sc WHERE sc.playlist_id = e.playlist_id AND sc.type = e.type AND sc.cat_id = e.category_id) " +
                         "AND NOT EXISTS(SELECT 1 FROM hidden_item i WHERE i.playlist_id = e.playlist_id AND i.type = e.type AND i.item_id = e.item_id) " +
                         "AND NOT EXISTS(SELECT 1 FROM shown_item s WHERE s.playlist_id = e.playlist_id AND s.type = e.type AND s.item_id = e.item_id)",
                     args,
-                ).use { c -> while (c.moveToNext()) if (AdultNames.isAdultEntry(c.getString(1))) items += c.getString(0) }
-                insertIgnore(w, "hidden_item", "item_id", playlistId, type, items)
+                ).use { c ->
+                    while (c.moveToNext()) if (c.getInt(2) == 1 || names.isAdultEntry(c.getString(1))) items += c.getString(0)
+                }
+                insertHidden(w, "hidden_item", "item_id", playlistId, type, items, auto = true)
             }
             w.setTransactionSuccessful()
         } finally {
@@ -236,7 +248,49 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
         }
     }
 
-    private fun insertIgnore(w: android.database.sqlite.SQLiteDatabase, table: String, column: String, playlistId: Long, type: ContentType, ids: Collection<String>) {
+    private fun adoptHidden(w: android.database.sqlite.SQLiteDatabase, playlistId: Long, names: AdultNames) {
+        val pl = playlistId.toString()
+        w.rawQuery(
+            "SELECT h.type, h.cat_id, c.name FROM hidden_category h JOIN category c ON c.playlist_id = h.playlist_id " +
+                "AND c.type = h.type AND c.cat_id = h.cat_id WHERE h.playlist_id = ? AND h.auto = 0",
+            arrayOf(pl),
+        ).use { c ->
+            while (c.moveToNext()) {
+                if (names.isAdultCategory(c.getString(2))) {
+                    w.execSQL("UPDATE hidden_category SET auto = 1 WHERE playlist_id = ? AND type = ? AND cat_id = ?", arrayOf<Any>(playlistId, c.getInt(0), c.getString(1)))
+                }
+            }
+        }
+        w.rawQuery(
+            "SELECT h.type, h.item_id, e.name, e.adult FROM hidden_item h JOIN entry e ON e.playlist_id = h.playlist_id " +
+                "AND e.type = h.type AND e.item_id = h.item_id WHERE h.playlist_id = ? AND h.auto = 0",
+            arrayOf(pl),
+        ).use { c ->
+            while (c.moveToNext()) {
+                if (c.getInt(3) == 1 || names.isAdultEntry(c.getString(2))) {
+                    w.execSQL("UPDATE hidden_item SET auto = 1 WHERE playlist_id = ? AND type = ? AND item_id = ?", arrayOf<Any>(playlistId, c.getInt(0), c.getString(1)))
+                }
+            }
+        }
+    }
+
+    /** Adds rows to a hidden table: automatic ones never replace a hand-made hide; hand-made ones replace automatic ones. */
+    private fun insertHidden(w: android.database.sqlite.SQLiteDatabase, table: String, column: String, playlistId: Long, type: ContentType, ids: Collection<String>, auto: Boolean) {
+        for (id in ids) {
+            val v = ContentValues().apply {
+                put("playlist_id", playlistId)
+                put("type", type.ordinal)
+                put(column, id)
+                put("auto", if (auto) 1 else 0)
+            }
+            w.insertWithOnConflict(
+                table, null, v,
+                if (auto) android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE else android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE,
+            )
+        }
+    }
+
+    private fun insertShown(w: android.database.sqlite.SQLiteDatabase, table: String, column: String, playlistId: Long, type: ContentType, ids: Collection<String>) {
         for (id in ids) {
             val v = ContentValues().apply {
                 put("playlist_id", playlistId)
@@ -267,7 +321,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
         }
     }
 
-    /** Hiding adds to [hiddenTable]; showing removes from it and records the choice in [shownTable]. */
+    /** Hiding adds a hand-made row to [hiddenTable]; showing removes it and records the choice in [shownTable]. */
     private suspend fun setRows(
         hiddenTable: String,
         shownTable: String,
@@ -280,8 +334,9 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
         val w = db.writableDatabase
         w.beginTransaction()
         try {
-            val (add, remove) = if (hidden) hiddenTable to shownTable else shownTable to hiddenTable
-            insertIgnore(w, add, column, playlistId, type, ids)
+            if (hidden) insertHidden(w, hiddenTable, column, playlistId, type, ids, auto = false)
+            else insertShown(w, shownTable, column, playlistId, type, ids)
+            val remove = if (hidden) shownTable else hiddenTable
             for (id in ids) {
                 w.delete(remove, "playlist_id = ? AND type = ? AND $column = ?", arrayOf(playlistId.toString(), type.ordinal.toString(), id))
             }

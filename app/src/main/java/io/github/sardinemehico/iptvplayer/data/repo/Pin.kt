@@ -11,6 +11,9 @@ object Pin {
 
     const val LENGTH = 6
 
+    /** Every playlist has a PIN; this is the one it starts with (and goes back to when removed). */
+    const val DEFAULT = "000000"
+
     fun isValid(pin: String) = pin.length == LENGTH && pin.all { it in '0'..'9' }
 
     /** "salt:hash", both hex. */

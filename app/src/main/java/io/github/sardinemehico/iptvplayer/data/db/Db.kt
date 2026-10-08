@@ -3,6 +3,7 @@ package io.github.sardinemehico.iptvplayer.data.db
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import io.github.sardinemehico.iptvplayer.data.repo.Pin
 
 /**
  * Raw SQLite (no Room): no annotation processing, no generated code, smaller APK.
@@ -59,7 +60,8 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
                 rating TEXT,
                 plot TEXT,
                 added INTEGER NOT NULL DEFAULT 0,
-                sort INTEGER NOT NULL
+                sort INTEGER NOT NULL,
+                adult INTEGER NOT NULL DEFAULT 0
             )""",
         )
         db.execSQL("CREATE UNIQUE INDEX entry_key ON entry(playlist_id, type, item_id)")
@@ -89,6 +91,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
                 playlist_id INTEGER NOT NULL,
                 type INTEGER NOT NULL,
                 cat_id TEXT NOT NULL,
+                auto INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (playlist_id, type, cat_id)
             )""",
         )
@@ -114,6 +117,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
                 playlist_id INTEGER NOT NULL,
                 type INTEGER NOT NULL,
                 item_id TEXT NOT NULL,
+                auto INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (playlist_id, type, item_id)
             )""",
         )
@@ -142,9 +146,23 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
         if (oldVersion < 2) db.execSQL("ALTER TABLE playlist ADD COLUMN pin_hash TEXT")
         if (oldVersion < 3) createProgress(db)
         if (oldVersion < 5) createHiddenCategories(db) // v4 had the hidden tables; v5 adds the shown ones
+        if (oldVersion == 5) {
+            // v6: automatic (adult words / is_adult) hides are told apart from the admin's own.
+            db.execSQL("ALTER TABLE hidden_category ADD COLUMN auto INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE hidden_item ADD COLUMN auto INTEGER NOT NULL DEFAULT 0")
+        }
+        if (oldVersion < 6) {
+            // The provider's is_adult flag; and every playlist gets a PIN, 000000 by default.
+            db.execSQL("ALTER TABLE entry ADD COLUMN adult INTEGER NOT NULL DEFAULT 0")
+            db.rawQuery("SELECT id FROM playlist WHERE pin_hash IS NULL OR pin_hash = ''", null).use { c ->
+                while (c.moveToNext()) {
+                    db.execSQL("UPDATE playlist SET pin_hash = ? WHERE id = ?", arrayOf<Any>(Pin.hash(Pin.DEFAULT), c.getLong(0)))
+                }
+            }
+        }
     }
 
     companion object {
-        const val VERSION = 5
+        const val VERSION = 6
     }
 }

@@ -12,6 +12,7 @@ import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.allowRgb565
 import coil3.request.crossfade
+import io.github.sardinemehico.iptvplayer.data.source.AdultNames
 import io.github.sardinemehico.iptvplayer.data.db.Db
 import io.github.sardinemehico.iptvplayer.data.net.AppDns
 import io.github.sardinemehico.iptvplayer.data.repo.Repository
@@ -88,9 +89,21 @@ class AppGraph(private val app: Application) {
 
     val db: Db by lazy { Db(app) }
     val repo: Repository by lazy { Repository(db, io) }
-    val syncer: Syncer by lazy { Syncer(http, db, repo, io) }
+    val syncer: Syncer by lazy { Syncer(http, db, repo, io) { adultNames() } }
     val player: PlayerController by lazy { PlayerController(app, http) }
     val prefs: Prefs by lazy { Prefs(app.getSharedPreferences("app", Context.MODE_PRIVATE)) }
+
+    /** The admin's adult word lists, compiled; rebuilt only when they change. */
+    fun adultNames(): AdultNames {
+        val cats = prefs.adultCategoryWords
+        val entries = prefs.adultEntryWords
+        val cached = adultCache
+        if (cached != null && cached.first == cats to entries) return cached.second
+        return AdultNames(cats, entries).also { adultCache = (cats to entries) to it }
+    }
+
+    @Volatile
+    private var adultCache: Pair<Pair<List<String>, List<String>>, AdultNames>? = null
 }
 
 /** Small settings and "last used" state. */
@@ -177,6 +190,20 @@ class Prefs(private val sp: SharedPreferences) {
     var dnsMode: Int
         get() = sp.getInt("dns_mode", AppDns.MODE_SYSTEM)
         set(v) = sp.edit().putInt("dns_mode", v).apply()
+
+    /** Words that hide a category (App Settings > playlist > Categories > Adult words). */
+    var adultCategoryWords: List<String>
+        get() = words("adult_category_words") ?: AdultNames.DEFAULT_CATEGORY_WORDS
+        set(v) = sp.edit().putString("adult_category_words", v.joinToString("\n")).apply()
+
+    /** Words that hide a channel, movie or series. */
+    var adultEntryWords: List<String>
+        get() = words("adult_entry_words") ?: AdultNames.DEFAULT_ENTRY_WORDS
+        set(v) = sp.edit().putString("adult_entry_words", v.joinToString("\n")).apply()
+
+    /** null until the admin edits the list: the defaults (which may grow with app updates) apply. */
+    private fun words(key: String): List<String>? =
+        sp.getString(key, null)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }
 
     /** AdultNames.VERSION the playlists were last scanned with (0 = never). */
     var adultScanVersion: Int

@@ -137,6 +137,7 @@ object XtreamParser {
                 var rating: String? = null
                 var plot: String? = null
                 var added = 0L
+                var adult = false
                 json.fields { field ->
                     when (field) {
                         "stream_id", "series_id" -> id = json.nextStringOrNull()
@@ -150,6 +151,7 @@ object XtreamParser {
                         "rating" -> rating = json.nextStringOrNull()
                         "plot" -> plot = json.nextStringOrNull()
                         "added", "last_modified" -> added = json.nextLongOrNull() ?: added
+                        "is_adult" -> adult = json.nextLongOrNull() == 1L
                         else -> json.skipValue()
                     }
                 }
@@ -168,6 +170,7 @@ object XtreamParser {
                         plot = plot?.trim()?.takeIf { it.isNotEmpty() },
                         added = added,
                         order = order++,
+                        adult = adult,
                     ),
                 )
             }
