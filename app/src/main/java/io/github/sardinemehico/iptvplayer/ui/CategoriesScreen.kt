@@ -65,7 +65,9 @@ class CategoriesScreen(
     override fun onShown() {
         activity.hideVideo()
         graph.player.stop()
-        show(type) // also after coming back from a category: its hidden count may have changed
+        // Also after coming back from a category: its hidden count may have changed. Focus returns to it.
+        show(type, focusAt = openedAt)
+        openedAt = -1
     }
 
     private fun show(t: ContentType, focusAt: Int = -1) {
@@ -81,15 +83,23 @@ class CategoriesScreen(
                 graph.repo.entriesForAdmin(playlist.id, t, category.key).map { Row(it.itemId, it.name, it.hidden) }
             }
             updateSummary()
-            if (focusAt >= 0) {
-                list.scrollToPosition(focusAt)
-                list.post { list.findViewHolderForAdapterPosition(focusAt)?.itemView?.requestFocus() }
-            }
+            if (focusAt >= 0) focusRow(focusAt)
             if (!loadedOnce) {
                 loadedOnce = true
                 if (category == null) tabs.getValue(t).requestFocus() else list.post { list.getChildAt(0)?.requestFocus() }
             }
         }
+    }
+
+    /** Focus row [position] once the rebuilt list has laid it out (a frame or two on a slow box). */
+    private fun focusRow(position: Int) {
+        list.scrollToPosition(position)
+        var tries = 0
+        fun attempt() {
+            val row = list.findViewHolderForAdapterPosition(position)?.itemView
+            if (row != null) row.requestFocus() else if (++tries < 8) list.post { attempt() }
+        }
+        list.post { attempt() }
     }
 
     private suspend fun save(ids: List<String>, hidden: Boolean) {
@@ -111,14 +121,30 @@ class CategoriesScreen(
         }
     }
 
+    /** Row whose entries were opened: focus goes back to it on return. */
+    private var openedAt = -1
+
     private fun open(position: Int) {
         val cat = adapter.rows.getOrNull(position)?.cat ?: return
+        openedAt = position
         activity.push(CategoriesScreen(activity, playlist, cat, type))
     }
 
+    /**
+     * Hide all: every row hidden by hand. Show all: back to the defaults (own choices cleared),
+     * so adult ones stay hidden: marking everything "shown by hand" would switch adult hiding off.
+     */
     private fun setAll(hidden: Boolean) {
         scope.launch {
-            save(adapter.rows.map { it.id }, hidden)
+            val ids = adapter.rows.map { it.id }
+            if (hidden) {
+                save(ids, true)
+            } else {
+                graph.repo.resetToDefault(playlist.id, type, ids, entries = category != null)
+                // Adult ones are hidden again by a background re-check; the list updates when it ends.
+                val tab = type
+                graph.rescanAdult(listOf(playlist.id)) { if (type == tab) show(type) }
+            }
             show(type)
         }
     }

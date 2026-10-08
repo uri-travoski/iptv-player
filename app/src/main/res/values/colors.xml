@@ -6,6 +6,8 @@
     <color name="divider">#FF57202D</color>
     <color name="accent">#FFB0243F</color>
     <color name="accent_pressed">#FFC93D58</color>
+    <!-- Flash while a button is pressed (OK on the remote, or a tap): clearly brighter than focus. -->
+    <color name="pressed">#FFE8607A</color>
     <color name="text_primary">#FFF7EEF0</color>
     <color name="text_secondary">#FFC9A9B0</color>
     <color name="error">#FFFF8A80</color>

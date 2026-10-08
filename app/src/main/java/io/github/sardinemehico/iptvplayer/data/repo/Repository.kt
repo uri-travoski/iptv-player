@@ -37,6 +37,9 @@ data class Playlist(
 
 data class CategoryRow(val key: String, val name: String)
 
+/** Order of a Movies / Series list (App: the Sort button). */
+enum class Sort { NEWEST, RATING, NAME, PROVIDER }
+
 /** A category as the admin sees it: hidden or not, and how many of its entries are hidden. */
 data class AdminCategory(val row: CategoryRow, val hidden: Boolean, val hiddenEntries: Int)
 
@@ -64,7 +67,11 @@ data class EntryDetails(val rating: String?, val plot: String?, val ext: String?
  * All database reads and writes. Every call runs on [io]; nothing here may be called
  * from the UI thread directly.
  */
-class Repository(private val db: Db, private val io: CoroutineDispatcher) {
+/**
+ * [io]: quick reads and writes for the screens. [scan]: long adult re-checks of a whole playlist,
+ * on their own low-priority thread so they never hold up a screen or playback.
+ */
+class Repository(private val db: Db, private val io: CoroutineDispatcher, private val scan: CoroutineDispatcher = io) {
 
     // ---- playlists ----
 
@@ -168,16 +175,25 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
 
     /** Every provider category, whether it is hidden and how many of its entries are: for the admin. */
     suspend fun categoriesForAdmin(playlistId: Long, type: ContentType): List<AdminCategory> = withContext(io) {
-        db.readableDatabase.rawQuery(
+        val r = db.readableDatabase
+        val args = arrayOf(playlistId.toString(), type.ordinal.toString())
+        // Hidden entries per category in one grouped pass (a sub-query per category took seconds on a box).
+        val hiddenPerCat = HashMap<String, Int>()
+        r.rawQuery(
+            "SELECT e.category_id, COUNT(*) FROM hidden_item i JOIN entry e ON e.playlist_id = i.playlist_id " +
+                "AND e.type = i.type AND e.item_id = i.item_id WHERE i.playlist_id = ? AND i.type = ? GROUP BY e.category_id",
+            args,
+        ).use { c -> while (c.moveToNext()) c.getString(0)?.let { hiddenPerCat[it] = c.getInt(1) } }
+        r.rawQuery(
             "SELECT cat_id, name, EXISTS(SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id " +
-                "AND h.type = c.type AND h.cat_id = c.cat_id), " +
-                "(SELECT COUNT(*) FROM hidden_item i JOIN entry e ON e.playlist_id = i.playlist_id AND e.type = i.type " +
-                "AND e.item_id = i.item_id WHERE i.playlist_id = c.playlist_id AND i.type = c.type AND e.category_id = c.cat_id) " +
-                "FROM category c WHERE playlist_id = ? AND type = ? ORDER BY sort",
-            arrayOf(playlistId.toString(), type.ordinal.toString()),
+                "AND h.type = c.type AND h.cat_id = c.cat_id) FROM category c WHERE playlist_id = ? AND type = ? ORDER BY sort",
+            args,
         ).use { c ->
             val out = ArrayList<AdminCategory>(c.count)
-            while (c.moveToNext()) out += AdminCategory(CategoryRow(c.getString(0), c.getString(1)), c.getInt(2) == 1, c.getInt(3))
+            while (c.moveToNext()) {
+                val id = c.getString(0)
+                out += AdminCategory(CategoryRow(id, c.getString(1)), c.getInt(2) == 1, hiddenPerCat[id] ?: 0)
+            }
             out
         }
     }
@@ -210,42 +226,72 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
      * [adopt]: once, after the update that added the `auto` flag: rows hidden before it that the
      * rules explain become automatic; the rest stay as hand-made hides.
      */
-    suspend fun autoHideAdult(playlistId: Long, names: AdultNames, adopt: Boolean = false) = withContext(io) {
-        val w = db.writableDatabase
+    suspend fun autoHideAdult(playlistId: Long, names: AdultNames, adopt: Boolean = false) = withContext(scan) {
+        val started = System.currentTimeMillis()
         val pl = playlistId.toString()
+        if (adopt) {
+            val w = db.writableDatabase
+            w.beginTransaction()
+            try {
+                adoptHidden(w, playlistId, names)
+                w.setTransactionSuccessful()
+            } finally {
+                w.endTransaction()
+            }
+        }
+        // Work out what to hide with reads only (WAL: they never block anyone, and nobody waits
+        // for them), then write it in one short transaction.
+        val r = db.readableDatabase
+        val hideCats = HashMap<ContentType, List<String>>()
+        val hideItems = HashMap<ContentType, List<String>>()
+        for (type in ContentType.values()) {
+            val args = arrayOf(pl, type.ordinal.toString())
+            fun ids(sql: String) = HashSet<String>().also { set -> r.rawQuery(sql, args).use { c -> while (c.moveToNext()) set += c.getString(0) } }
+            val manualCats = ids("SELECT cat_id FROM hidden_category WHERE playlist_id = ? AND type = ? AND auto = 0")
+            val shownCats = ids("SELECT cat_id FROM shown_category WHERE playlist_id = ? AND type = ?")
+            val manualItems = ids("SELECT item_id FROM hidden_item WHERE playlist_id = ? AND type = ? AND auto = 0")
+            val shownItems = ids("SELECT item_id FROM shown_item WHERE playlist_id = ? AND type = ?")
+            val cats = ArrayList<String>()
+            r.rawQuery("SELECT cat_id, name FROM category WHERE playlist_id = ? AND type = ?", args).use { c ->
+                while (c.moveToNext()) {
+                    val id = c.getString(0)
+                    if (id !in shownCats && id !in manualCats && names.isAdultCategory(c.getString(1))) cats += id
+                }
+            }
+            // Entries in a hidden category are hidden anyway; a category shown by hand is shown whole.
+            val skipCats = HashSet<String>(cats).apply { addAll(manualCats); addAll(shownCats) }
+            val items = ArrayList<String>()
+            r.rawQuery("SELECT item_id, name, adult, category_id FROM entry WHERE playlist_id = ? AND type = ?", args).use { c ->
+                while (c.moveToNext()) {
+                    val cat = c.getString(3)
+                    if (cat != null && cat in skipCats) continue
+                    val id = c.getString(0)
+                    if (id in manualItems || id in shownItems) continue
+                    if (c.getInt(2) == 1 || names.isAdultEntry(c.getString(1))) items += id
+                }
+            }
+            hideCats[type] = cats
+            hideItems[type] = items
+        }
+        val w = db.writableDatabase
         w.beginTransaction()
         try {
-            if (adopt) adoptHidden(w, playlistId, names)
             w.delete("hidden_category", "playlist_id = ? AND auto = 1", arrayOf(pl))
             w.delete("hidden_item", "playlist_id = ? AND auto = 1", arrayOf(pl))
             for (type in ContentType.values()) {
-                val args = arrayOf(pl, type.ordinal.toString())
-                val cats = ArrayList<String>()
-                w.rawQuery(
-                    "SELECT cat_id, name FROM category c WHERE playlist_id = ? AND type = ? " +
-                        "AND NOT EXISTS(SELECT 1 FROM shown_category s WHERE s.playlist_id = c.playlist_id AND s.type = c.type AND s.cat_id = c.cat_id) " +
-                        "AND NOT EXISTS(SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id AND h.type = c.type AND h.cat_id = c.cat_id)",
-                    args,
-                ).use { c -> while (c.moveToNext()) if (names.isAdultCategory(c.getString(1))) cats += c.getString(0) }
-                insertHidden(w, "hidden_category", "cat_id", playlistId, type, cats, auto = true)
-                val items = ArrayList<String>()
-                w.rawQuery(
-                    "SELECT item_id, name, adult FROM entry e WHERE playlist_id = ? AND type = ? " +
-                        "AND NOT EXISTS(SELECT 1 FROM hidden_category h WHERE h.playlist_id = e.playlist_id AND h.type = e.type AND h.cat_id = e.category_id) " +
-                        // A category the admin showed by hand is shown whole.
-                        "AND NOT EXISTS(SELECT 1 FROM shown_category sc WHERE sc.playlist_id = e.playlist_id AND sc.type = e.type AND sc.cat_id = e.category_id) " +
-                        "AND NOT EXISTS(SELECT 1 FROM hidden_item i WHERE i.playlist_id = e.playlist_id AND i.type = e.type AND i.item_id = e.item_id) " +
-                        "AND NOT EXISTS(SELECT 1 FROM shown_item s WHERE s.playlist_id = e.playlist_id AND s.type = e.type AND s.item_id = e.item_id)",
-                    args,
-                ).use { c ->
-                    while (c.moveToNext()) if (c.getInt(2) == 1 || names.isAdultEntry(c.getString(1))) items += c.getString(0)
-                }
-                insertHidden(w, "hidden_item", "item_id", playlistId, type, items, auto = true)
+                insertHidden(w, "hidden_category", "cat_id", playlistId, type, hideCats[type].orEmpty(), auto = true)
+                insertHidden(w, "hidden_item", "item_id", playlistId, type, hideItems[type].orEmpty(), auto = true)
             }
             w.setTransactionSuccessful()
         } finally {
             w.endTransaction()
         }
+        val shownByHand = android.database.DatabaseUtils.queryNumEntries(r, "shown_category", "playlist_id = ?", arrayOf(pl))
+        android.util.Log.i(
+            "WorldTV.Adult",
+            "playlist $playlistId: auto-hid ${hideCats.values.sumOf { it.size }} categories, ${hideItems.values.sumOf { it.size }} entries; " +
+                "$shownByHand categories shown by hand; ${System.currentTimeMillis() - started} ms",
+        )
     }
 
     private fun adoptHidden(w: android.database.sqlite.SQLiteDatabase, playlistId: Long, names: AdultNames) {
@@ -302,6 +348,44 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
     }
 
     /**
+     * "Show all": back to the defaults for [ids] (categories, or entries with [entries]): the
+     * admin's own hides and shows are cleared, so only automatic (adult) hiding applies. Run
+     * [autoHideAdult] afterwards to hide adult ones again.
+     */
+    suspend fun resetToDefault(playlistId: Long, type: ContentType, ids: Collection<String>, entries: Boolean) = withContext(io) {
+        val (hidden, shown, column) = if (entries) Triple("hidden_item", "shown_item", "item_id") else Triple("hidden_category", "shown_category", "cat_id")
+        val w = db.writableDatabase
+        w.beginTransaction()
+        try {
+            for (id in ids) {
+                val args = arrayOf(playlistId.toString(), type.ordinal.toString(), id)
+                w.delete(hidden, "playlist_id = ? AND type = ? AND $column = ? AND auto = 0", args)
+                w.delete(shown, "playlist_id = ? AND type = ? AND $column = ?", args)
+            }
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
+    }
+
+    /**
+     * Before 0.1.28, "Show all" marked every category as shown by hand, which switched adult
+     * hiding off for that library. A library where every category is marked that way gets the
+     * marks cleared. Returns how many marks were removed.
+     */
+    suspend fun forgetBulkShown(playlistId: Long): Int = withContext(io) {
+        val w = db.writableDatabase
+        var removed = 0
+        for (type in ContentType.values()) {
+            val args = arrayOf(playlistId.toString(), type.ordinal.toString())
+            val cats = android.database.DatabaseUtils.queryNumEntries(w, "category", "playlist_id = ? AND type = ?", args)
+            val shown = android.database.DatabaseUtils.queryNumEntries(w, "shown_category", "playlist_id = ? AND type = ?", args)
+            if (cats > 0 && shown >= cats) removed += w.delete("shown_category", "playlist_id = ? AND type = ?", args)
+        }
+        removed
+    }
+
+    /**
      * Hides or shows categories [catIds] of one library: the admin's choice, kept over adult
      * auto-hiding. Showing a category shows it whole: entries hidden inside it are shown again
      * (single ones can be hidden afterwards).
@@ -353,14 +437,14 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
         }
     }
 
-    suspend fun page(playlistId: Long, type: ContentType, key: String, offset: Int, limit: Int): List<EntryRow> =
+    suspend fun page(playlistId: Long, type: ContentType, key: String, offset: Int, limit: Int, sort: Sort = Sort.PROVIDER): List<EntryRow> =
         withContext(io) {
             val (where, args) = filter(playlistId, type, key)
             db.readableDatabase.rawQuery(
                 """SELECT e.item_id, e.name, e.logo, e.stream_url, e.ext, e.catchup_days,
                    EXISTS(SELECT 1 FROM favourite f WHERE f.playlist_id = e.playlist_id
                           AND f.type = e.type AND f.item_id = e.item_id)
-                   FROM entry e $where ORDER BY ${order(key)} LIMIT $limit OFFSET $offset""",
+                   FROM entry e $where ORDER BY ${order(key, sort)} LIMIT $limit OFFSET $offset""",
                 args,
             ).use { c ->
                 val out = ArrayList<EntryRow>(c.count)
@@ -499,11 +583,17 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher) {
         }
     }
 
-    private fun order(key: String) = if (key == KEY_CONTINUE) {
-        "(SELECT p.updated FROM progress p WHERE p.playlist_id = e.playlist_id AND p.type = e.type " +
+    /** Continue watching: most recent first. Favourites: their own (provider) order. Else [sort]; ties keep the provider order. */
+    private fun order(key: String, sort: Sort) = when {
+        key == KEY_CONTINUE -> "(SELECT p.updated FROM progress p WHERE p.playlist_id = e.playlist_id AND p.type = e.type " +
             "AND p.item_id = e.item_id) DESC"
-    } else {
-        "e.sort"
+        key == KEY_FAV -> "e.sort"
+        else -> when (sort) {
+            Sort.NEWEST -> "e.added DESC, e.sort"
+            Sort.RATING -> "CAST(e.rating AS REAL) DESC, e.sort" // no rating counts as 0: last
+            Sort.NAME -> "e.name COLLATE NOCASE, e.sort"
+            Sort.PROVIDER -> "e.sort"
+        }
     }
 
     private fun likeEscape(s: String) = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

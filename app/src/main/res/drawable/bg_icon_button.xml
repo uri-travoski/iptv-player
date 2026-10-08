@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Round player icon button: invisible until focused (remote) or pressed (touch), then the theme accent. -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:exitFadeDuration="250">
+    <!-- Pressed first (also while focused), fading out, so every press shows. -->
+    <item android:state_pressed="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/pressed" />
+        </shape>
+    </item>
     <item android:state_focused="true">
         <shape android:shape="oval">
             <solid android:color="@color/accent" />
-        </shape>
-    </item>
-    <item android:state_pressed="true">
-        <shape android:shape="oval">
-            <solid android:color="#40FFFFFF" />
         </shape>
     </item>
     <item>

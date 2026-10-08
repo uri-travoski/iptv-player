@@ -20,8 +20,8 @@
     <string name="action_details">Details</string>
     <string name="action_categories">Categories (show / hide)</string>
     <string name="categories_title">Categories · %1$s</string>
-    <string name="categories_hint">OK: show or hide a category · Menu or long-press: show or hide single channels in it. Hidden items are left out everywhere, including All, Favourites and search.</string>
-    <string name="entries_hint">OK: show or hide this entry. Hidden entries are left out everywhere, including All, Favourites and search.</string>
+    <string name="categories_hint">OK: show or hide a category · Menu or long-press: show or hide single channels in it. Show all goes back to the defaults: adult ones stay hidden (select one to show it). Hidden items are left out everywhere, including All, Favourites and search.</string>
+    <string name="entries_hint">OK: show or hide this entry. Show all goes back to the defaults: adult ones stay hidden (select one to show it). Hidden entries are left out everywhere, including All, Favourites and search.</string>
     <string name="categories_hidden_entries">(%1$d hidden)</string>
     <string name="categories_show_all">Show all</string>
     <string name="categories_hide_all">Hide all</string>
@@ -36,7 +36,9 @@
     <string name="adult_words_restore">Restore defaults</string>
     <string name="adult_words_help_categories">One of these words in a category’s name hides the whole category. Applies to every playlist.</string>
     <string name="adult_words_help_entries">One of these words in a channel, movie or series name hides it. Words also used in normal titles (sex, porn, fuck, milf…) are built in and only hide when two different ones appear together. Applies to every playlist.</string>
-    <string name="adult_words_rules">Whole words, any case. Spaces match any spacing (“playboy tv” also finds “PlayboyTV”). A * at the end matches any ending (“porn*” finds “porno”). OK or tap on a word removes it.</string>
+    <string name="adult_words_rules">Whole words, any case. Spaces match any spacing (“playboy tv” also finds “PlayboyTV”). A * at the end matches any ending (“porn*” finds “porno”). OK or tap on a word to remove it.</string>
+    <string name="adult_words_remove_q">Remove “%1$s”?</string>
+    <string name="adult_words_remove">Remove</string>
     <string name="adult_words_count">%1$d words</string>
     <string name="adult_words_removed">Removed “%1$s”</string>
     <string name="adult_words_exists">“%1$s” is already in the list</string>
@@ -93,6 +95,10 @@
     <string name="back">Back</string>
 
     <string name="search">Search</string>
+    <string name="sort_newest">Sort: Newest</string>
+    <string name="sort_rating">Sort: Rating</string>
+    <string name="sort_name">Sort: A–Z</string>
+    <string name="sort_provider">Sort: Provider order</string>
     <string name="search_results">Search: “%1$s”</string>
     <string name="resume_at">Resume %1$s</string>
     <string name="resume_episode">Resume %1$s · %2$s</string>

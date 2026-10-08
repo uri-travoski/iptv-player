@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Android TV launcher banner (320x180dp): like the app icon, a white live TV symbol on the
-     home tiles' colour. -->
+     selected home tile's colour (accent). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="320dp"
     android:height="180dp"
     android:viewportWidth="320"
     android:viewportHeight="180">
     <path
-        android:fillColor="@color/surface"
+        android:fillColor="@color/accent"
         android:pathData="M0,0h320v180h-320z" />
     <!-- 24-unit icon scaled to 110 units, centred. -->
     <group

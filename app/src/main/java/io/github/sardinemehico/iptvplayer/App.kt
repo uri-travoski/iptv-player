@@ -12,15 +12,22 @@ import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.allowRgb565
 import coil3.request.crossfade
-import io.github.sardinemehico.iptvplayer.data.source.AdultNames
 import io.github.sardinemehico.iptvplayer.data.db.Db
+import io.github.sardinemehico.iptvplayer.data.model.ContentType
 import io.github.sardinemehico.iptvplayer.data.net.AppDns
 import io.github.sardinemehico.iptvplayer.data.repo.Repository
+import io.github.sardinemehico.iptvplayer.data.repo.Sort
+import io.github.sardinemehico.iptvplayer.data.source.AdultNames
 import io.github.sardinemehico.iptvplayer.data.sync.Syncer
 import io.github.sardinemehico.iptvplayer.player.PlayerController
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okio.Path.Companion.toOkioPath
 import java.util.concurrent.TimeUnit
@@ -88,7 +95,36 @@ class AppGraph(private val app: Application) {
     }
 
     val db: Db by lazy { Db(app) }
-    val repo: Repository by lazy { Repository(db, io) }
+    /**
+     * One low-priority thread for long adult re-checks (a big playlist has 300k titles): screens
+     * and playback keep their own threads and the CPU comes first to them.
+     */
+    val scanDispatcher: CoroutineDispatcher by lazy {
+        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread({ android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); r.run() }, "adult-scan")
+        }.asCoroutineDispatcher()
+    }
+
+    /** Work that outlives the screen that started it (a re-check after the admin leaves). */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    val repo: Repository by lazy { Repository(db, io, scanDispatcher) }
+
+    /**
+     * Re-checks [playlistIds] (all when null) for adult content in the background. Callers never
+     * wait for it; [done] runs on the main thread afterwards. Failures are logged, never thrown.
+     */
+    fun rescanAdult(playlistIds: List<Long>? = null, done: () -> Unit = {}): Job = appScope.launch {
+        try {
+            val names = adultNames()
+            for (id in playlistIds ?: repo.playlists().map { it.id }) repo.autoHideAdult(id, names)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("WorldTV.Adult", "re-check failed", e)
+        }
+        done()
+    }
     val syncer: Syncer by lazy { Syncer(http, db, repo, io) { adultNames() } }
     val player: PlayerController by lazy { PlayerController(app, http) }
     val prefs: Prefs by lazy { Prefs(app.getSharedPreferences("app", Context.MODE_PRIVATE)) }
@@ -204,6 +240,12 @@ class Prefs(private val sp: SharedPreferences) {
     /** null until the admin edits the list: the defaults (which may grow with app updates) apply. */
     private fun words(key: String): List<String>? =
         sp.getString(key, null)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }
+
+    /** Sort order of Movies / Series lists; newest first by default. */
+    fun vodSort(type: ContentType): Sort =
+        Sort.values().getOrNull(sp.getInt("vod_sort_" + type.name, Sort.NEWEST.ordinal)) ?: Sort.NEWEST
+
+    fun setVodSort(type: ContentType, sort: Sort) = sp.edit().putInt("vod_sort_" + type.name, sort.ordinal).apply()
 
     /** AdultNames.VERSION the playlists were last scanned with (0 = never). */
     var adultScanVersion: Int

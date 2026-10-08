@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Second-row tile: a faint fill so it recedes behind the big tiles; full red when focused,
      like every other focused control. -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:exitFadeDuration="250">
+    <!-- Pressed first (also while focused), fading out, so every press shows. -->
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/pressed" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="@color/accent" />

@@ -33,7 +33,6 @@ class AdultWordsScreen(activity: MainActivity) : Screen(activity) {
     private val entryWords = graph.prefs.adultEntryWords.toMutableList()
     private var showingCategories = true
     private var changed = false
-    private var applying = false
 
     private val words get() = if (showingCategories) categoryWords else entryWords
 
@@ -57,26 +56,17 @@ class AdultWordsScreen(activity: MainActivity) : Screen(activity) {
         tabCategories.requestFocus()
     }
 
-    /** Leaving with changes: re-check every playlist first, then go back. */
+    /**
+     * Leaving with changes: go back at once and re-check every playlist in the background (a big
+     * playlist takes a while on a slow box; nothing waits for it).
+     */
     override fun onBack(): Boolean {
-        if (applying) return true
-        if (!changed) return false
-        applying = true
-        activity.toast(activity.getString(R.string.adult_words_applying))
-        activity.keepScreenOn(true)
-        scope.launch {
-            try {
-                val names = graph.adultNames()
-                graph.repo.playlists().forEach { graph.repo.autoHideAdult(it.id, names) }
-                activity.toast(activity.getString(R.string.adult_words_applied))
-            } finally {
-                activity.keepScreenOn(false)
-                changed = false
-                applying = false
-                activity.pop()
-            }
+        if (changed) {
+            changed = false
+            activity.toast(activity.getString(R.string.adult_words_applying))
+            graph.rescanAdult { activity.toast(activity.getString(R.string.adult_words_applied)) }
         }
-        return true
+        return false
     }
 
     private fun show(categories: Boolean) {
@@ -109,6 +99,16 @@ class AdultWordsScreen(activity: MainActivity) : Screen(activity) {
         field.setText("")
         refresh()
         list.scrollToPosition(0)
+    }
+
+    /** A stray OK on the remote mustn't delete a word: ask first. */
+    private fun confirmRemove(position: Int) {
+        val word = words.getOrNull(position) ?: return
+        android.app.AlertDialog.Builder(activity)
+            .setTitle(activity.getString(R.string.adult_words_remove_q, word))
+            .setPositiveButton(R.string.adult_words_remove) { _, _ -> remove(position) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun remove(position: Int) {
@@ -145,7 +145,7 @@ class AdultWordsScreen(activity: MainActivity) : Screen(activity) {
 
         inner class VH(val text: TextView) : RecyclerView.ViewHolder(text) {
             init {
-                text.setOnClickListener { bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }?.let(::remove) }
+                text.setOnClickListener { bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }?.let(::confirmRemove) }
             }
         }
     }

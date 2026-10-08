@@ -66,7 +66,7 @@ class Syncer(
     suspend fun sync(p: Playlist, progress: (String) -> Unit) {
         if (p.isXtream) syncXtream(p, progress) else syncM3u(p, progress)
         // New adult categories/entries are hidden on every load; the admin's own choices stay.
-        progress("Checking for adult content…")
+        // Silently: the last progress line stays up while it runs.
         try {
             repo.autoHideAdult(p.id, adultNames())
         } catch (e: kotlinx.coroutines.CancellationException) {

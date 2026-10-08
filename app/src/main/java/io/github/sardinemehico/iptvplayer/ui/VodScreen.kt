@@ -13,6 +13,7 @@ import io.github.sardinemehico.iptvplayer.data.model.ContentType
 import io.github.sardinemehico.iptvplayer.data.repo.EntryRow
 import io.github.sardinemehico.iptvplayer.data.repo.Playlist
 import io.github.sardinemehico.iptvplayer.data.repo.Repository
+import io.github.sardinemehico.iptvplayer.data.repo.Sort
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -32,6 +33,8 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
     private val categoryTitle: TextView = root.findViewById(R.id.category_title)
     private val empty: View = root.findViewById(R.id.empty)
     private val searchField: EditText = root.findViewById(R.id.search)
+    private val sortButton: TextView = root.findViewById(R.id.sort)
+    private var sort = graph.prefs.vodSort(type)
 
     private val categoryAdapter = CategoryAdapter(
         onFocused = ::onCategoryFocused,
@@ -65,6 +68,14 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
         grid.itemAnimator = null
         grid.setHasFixedSize(true)
         grid.setItemViewCacheSize(columns * 2)
+        updateSortLabel()
+        sortButton.setOnClickListener {
+            // Newest → Rating → A–Z → Provider order → Newest
+            sort = Sort.values()[(sort.ordinal + 1) % Sort.values().size]
+            graph.prefs.setVodSort(type, sort)
+            updateSortLabel()
+            scope.launch { reloadList() }
+        }
     }
 
     override fun onShown() {
@@ -186,10 +197,22 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
         listName = name
         count = graph.repo.count(p.id, type, key)
         categoryTitle.text = "$name  ($count)"
+        // Favourites and Continue watching keep their own order.
+        sortButton.visibility = if (key == Repository.KEY_FAV || key == Repository.KEY_CONTINUE) View.INVISIBLE else View.VISIBLE
         empty.visibility = if (count == 0) View.VISIBLE else View.GONE
-        posterAdapter.reset(count) { offset, limit -> graph.repo.page(p.id, type, key, offset, limit) }
+        val order = sort
+        posterAdapter.reset(count) { offset, limit -> graph.repo.page(p.id, type, key, offset, limit, order) }
         grid.scrollToPosition(0)
     }
+
+    private fun updateSortLabel() = sortButton.setText(
+        when (sort) {
+            Sort.NEWEST -> R.string.sort_newest
+            Sort.RATING -> R.string.sort_rating
+            Sort.NAME -> R.string.sort_name
+            Sort.PROVIDER -> R.string.sort_provider
+        },
+    )
 
     private fun focusPoster(index: Int) {
         if (count == 0) return

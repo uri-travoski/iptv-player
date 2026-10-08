@@ -67,6 +67,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
         db.execSQL("CREATE UNIQUE INDEX entry_key ON entry(playlist_id, type, item_id)")
         db.execSQL("CREATE INDEX entry_all ON entry(playlist_id, type, sort)")
         db.execSQL("CREATE INDEX entry_cat ON entry(playlist_id, type, category_id, sort)")
+        createSortIndexes(db)
         // Favourites live outside `entry` so they survive a re-sync.
         db.execSQL(
             """CREATE TABLE favourite (
@@ -123,6 +124,12 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
         )
     }
 
+    /** Movies and Series open newest first: these keep that order fast in 245k-title libraries. */
+    private fun createSortIndexes(db: SQLiteDatabase) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS entry_added ON entry(playlist_id, type, added)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS entry_cat_added ON entry(playlist_id, type, category_id, added)")
+    }
+
     /**
      * Where a movie or series was left. One row per movie / per series (its last episode).
      * Kept outside `entry`, like favourites, so it survives a re-sync.
@@ -151,6 +158,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
             db.execSQL("ALTER TABLE hidden_category ADD COLUMN auto INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE hidden_item ADD COLUMN auto INTEGER NOT NULL DEFAULT 0")
         }
+        if (oldVersion < 7) createSortIndexes(db)
         if (oldVersion < 6) {
             // The provider's is_adult flag; and every playlist gets a PIN, 000000 by default.
             db.execSQL("ALTER TABLE entry ADD COLUMN adult INTEGER NOT NULL DEFAULT 0")
@@ -163,6 +171,6 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
     }
 
     companion object {
-        const val VERSION = 6
+        const val VERSION = 7
     }
 }

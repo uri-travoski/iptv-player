@@ -64,4 +64,13 @@ class AdultNamesTest {
         assertFalse(AdultNames(emptyList(), emptyList()).isAdultEntry("Carib Fab Anal"))
         assertFalse(AdultNames(emptyList(), emptyList()).isAdultCategory("FOR Adults"))
     }
+
+    /** The fast pre-check must never skip a name the full rules would hide. */
+    @Test
+    fun everyDefaultWordStillHides() {
+        AdultNames.DEFAULT_ENTRY_WORDS.forEach { w ->
+            val sample = "UK: " + w.removeSuffix("*").uppercase() + (if (w.endsWith("*")) "X" else "") + " HD"
+            assertTrue(sample, names.isAdultEntry(sample))
+        }
+    }
 }

@@ -54,9 +54,13 @@ class SearchBox(
         }
     }
 
-    /** Empties the field without reporting it (a category was picked instead). */
+    /**
+     * Empties the field without reporting it (a category was picked instead). Never while the
+     * field has focus: rewriting text under the cursor wiped a half-typed letter, and the TV's
+     * Leanback keyboard then closed and dropped focus into the lists.
+     */
     fun clearQuietly() {
-        if (field.text.isEmpty()) return
+        if (field.text.isEmpty() || field.hasFocus()) return
         pending?.cancel()
         quiet = true
         field.setText("")

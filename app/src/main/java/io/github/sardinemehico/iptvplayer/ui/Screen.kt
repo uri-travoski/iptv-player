@@ -30,6 +30,9 @@ abstract class Screen(protected val activity: MainActivity) {
 
     abstract val root: View
 
+    /** The view that had focus when another screen was pushed on top; given focus back on return. */
+    internal var savedFocus: View? = null
+
     /** Mobile layout: the TV's fixed-width centred column ([id]) takes the phone's full width, from the top. */
     protected fun fullWidthOnMobile(id: Int) {
         if (!graph.prefs.isMobile) return

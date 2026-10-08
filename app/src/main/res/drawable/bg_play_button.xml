@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Big play/pause button: always the theme accent; a white ring shows remote focus. -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:exitFadeDuration="250">
+    <!-- Pressed first (also while focused), fading out, so every press shows. -->
+    <item android:state_pressed="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/pressed" />
+            <stroke android:width="3dp" android:color="@color/text_primary" />
+        </shape>
+    </item>
     <item android:state_focused="true">
         <shape android:shape="oval">
             <solid android:color="@color/accent" />
             <stroke android:width="3dp" android:color="@color/text_primary" />
-        </shape>
-    </item>
-    <item android:state_pressed="true">
-        <shape android:shape="oval">
-            <solid android:color="@color/accent_pressed" />
         </shape>
     </item>
     <item>

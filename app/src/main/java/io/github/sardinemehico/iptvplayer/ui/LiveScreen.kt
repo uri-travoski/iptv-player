@@ -225,7 +225,10 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         }
         cats.all = graph.repo.categories(p.id, ContentType.LIVE)
 
-        val startIndex = cats.indexOf(graph.prefs.lastLiveCategory).coerceAtLeast(0)
+        // Favourites first when there are any (they are the viewer's own list); else the last category.
+        val hasFavourites = graph.repo.count(p.id, ContentType.LIVE, Repository.KEY_FAV) > 0
+        val startKey = if (hasFavourites) Repository.KEY_FAV else graph.prefs.lastLiveCategory.takeUnless { it == Repository.KEY_FAV }
+        val startIndex = cats.indexOf(startKey).coerceAtLeast(0)
         selectCategory(startIndex)
 
         // Restore the last channel and play it in the preview.

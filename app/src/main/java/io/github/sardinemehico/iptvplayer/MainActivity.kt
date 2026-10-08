@@ -166,8 +166,12 @@ class MainActivity : ComponentActivity() {
         if (graph.prefs.adultScanVersion >= AdultNames.VERSION) return
         try {
             // From version 1 (before hides were marked automatic): adopt the rows the rules explain.
-            val adopt = graph.prefs.adultScanVersion == 1
-            graph.repo.playlists().forEach { graph.repo.autoHideAdult(it.id, graph.adultNames(), adopt) }
+            val from = graph.prefs.adultScanVersion
+            val adopt = from == 1 // (2 and later already mark automatic hides)
+            graph.repo.playlists().forEach {
+                if (from < 4) graph.repo.forgetBulkShown(it.id) // old "Show all" switched adult hiding off
+                graph.repo.autoHideAdult(it.id, graph.adultNames(), adopt)
+            }
             graph.prefs.adultScanVersion = AdultNames.VERSION
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -218,6 +222,7 @@ class MainActivity : ComponentActivity() {
 
     fun push(screen: Screen) {
         stack.lastOrNull()?.let {
+            it.savedFocus = currentFocus?.takeIf { v -> isInside(v, it.root) }
             it.onHidden()
             screens.removeView(it.root)
         }
@@ -234,7 +239,31 @@ class MainActivity : ComponentActivity() {
         stack.lastOrNull()?.let {
             screens.addView(it.root, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             it.onShown()
+            restoreFocus(it)
+            it.root.post { restoreFocus(it) } // in case the screen's own focus request didn't land
         }
+    }
+
+    /**
+     * Back on a screen with nothing focused, the remote's next presses went nowhere (and then
+     * jumped): give focus back to the view the user left from, else to the screen's first one.
+     */
+    private fun restoreFocus(screen: Screen) {
+        if (stack.lastOrNull() !== screen) return
+        val current = currentFocus
+        if (current != null && isInside(current, screen.root)) return
+        val saved = screen.savedFocus
+        if (saved != null && saved.isShown && isInside(saved, screen.root) && saved.requestFocus()) return
+        screen.root.requestFocus()
+    }
+
+    private fun isInside(v: View, root: View): Boolean {
+        var p: Any? = v
+        while (p is View) {
+            if (p === root) return true
+            p = p.parent
+        }
+        return false
     }
 
     /** Replaces the whole stack with [screen] (or empties it). */

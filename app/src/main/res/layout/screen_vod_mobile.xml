@@ -14,7 +14,7 @@
         android:paddingStart="16dp"
         android:textSize="22sp" />
 
-    <EditText
+    <io.github.sardinemehico.iptvplayer.ui.SearchField
         android:id="@+id/search"
         style="@style/SearchInput"
         android:layout_marginStart="12dp"
@@ -31,18 +31,38 @@
         android:paddingEnd="12dp"
         android:scrollbars="none" />
 
-    <TextView
-        android:id="@+id/category_title"
-        style="@style/Text.Body"
+    <!-- Category name and count; the sort order on the right (hidden in Favourites and Continue watching). -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:textSize="16sp"
-        android:textStyle="bold" />
+        android:layout_marginTop="8dp"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingEnd="12dp">
+
+        <TextView
+            android:id="@+id/category_title"
+            style="@style/Text.Body"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:paddingStart="16dp"
+            android:paddingEnd="8dp"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/sort"
+            style="@style/TileButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:textSize="14sp" />
+    </LinearLayout>
 
     <FrameLayout
         android:layout_width="match_parent"

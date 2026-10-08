@@ -42,7 +42,7 @@
             android:paddingEnd="16dp"
             android:textSize="14sp" />
 
-        <EditText
+        <io.github.sardinemehico.iptvplayer.ui.SearchField
             android:id="@+id/search"
             style="@style/SearchInput"
             android:layout_marginStart="12dp"
