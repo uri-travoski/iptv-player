@@ -168,6 +168,7 @@ class MainActivity : ComponentActivity() {
             // From version 1 (before hides were marked automatic): adopt the rows the rules explain.
             val from = graph.prefs.adultScanVersion
             val adopt = from == 1 // (2 and later already mark automatic hides)
+            if (from < 5) graph.prefs.addAdultCategoryWords(AdultNames.ADDED_CATEGORY_WORDS_5)
             graph.repo.playlists().forEach {
                 if (from < 4) graph.repo.forgetBulkShown(it.id) // old "Show all" switched adult hiding off
                 graph.repo.autoHideAdult(it.id, graph.adultNames(), adopt)

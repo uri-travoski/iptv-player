@@ -51,13 +51,16 @@ class AdultNames(categoryWords: List<String>, entryWords: List<String>) {
     companion object {
 
         /** Raise when the defaults or the rules change: playlists are checked again on the next start. */
-        const val VERSION = 4
+        const val VERSION = 5
 
         val DEFAULT_CATEGORY_WORDS = listOf(
             "xxx", "adult", "adults", "18+", "+18", "for adults", "adults only", "porn*", "erotic*", "hentai", "hanime",
             "sex", "sexy", "playboy", "hustler", "brazzers", "onlyfans", "ullu", "atrangii", "nsfw", "для взрослых",
-            "порно*", "секс*",
+            "порно*", "секс*", "dasi muj", "xx | hindi xx",
         )
+
+        /** Category words added in [VERSION] 5: also added to a list the admin has edited. */
+        val ADDED_CATEGORY_WORDS_5 = listOf("dasi muj", "xx | hindi xx")
 
         val DEFAULT_ENTRY_WORDS = listOf(
             "busty", "brazzers*", "fucked", "digital playground", "adultime", "wowgirls", "creampie", "creampies", "tits",

@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import io.github.sardinemehico.iptvplayer.MainActivity
@@ -47,10 +48,12 @@ class CategoriesScreen(
         if (category == null) {
             title.text = activity.getString(R.string.categories_title, playlist.name)
             tabs.forEach { (t, v) -> v.setOnClickListener { show(t) } }
-            root.findViewById<View>(R.id.hide_adult).setOnClickListener { activity.push(AdultWordsScreen(activity)) }
+            root.findViewById<View>(R.id.adult_words).setOnClickListener { activity.push(AdultWordsScreen(activity)) }
+            root.findViewById<View>(R.id.hide_adult).setOnClickListener { confirmHideAdult() }
         } else {
             title.text = category.name
             (tabs.getValue(ContentType.LIVE).parent as View).visibility = View.GONE
+            root.findViewById<View>(R.id.adult_words).visibility = View.GONE
             root.findViewById<View>(R.id.hide_adult).visibility = View.GONE
             root.findViewById<View>(R.id.adult_note).visibility = View.GONE
             root.findViewById<TextView>(R.id.hint).setText(R.string.entries_hint)
@@ -146,6 +149,32 @@ class CategoriesScreen(
                 graph.rescanAdult(listOf(playlist.id)) { if (type == tab) show(type) }
             }
             show(type)
+        }
+    }
+
+    /** Hide adult: asks first, as it undoes the admin's own "shown" choices for adult content. */
+    private fun confirmHideAdult() {
+        android.app.AlertDialog.Builder(activity)
+            .setTitle(activity.getString(R.string.categories_hide_adult_q, playlist.name))
+            .setMessage(R.string.categories_hide_adult_msg)
+            .setPositiveButton(R.string.categories_hide_adult) { _, _ -> hideAdult() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun hideAdult() {
+        // In the activity's scope: it finishes even if the admin leaves this screen meanwhile.
+        val tab = type
+        activity.lifecycleScope.launch {
+            try {
+                graph.repo.hideAllAdult(playlist.id, graph.adultNames())
+                activity.toast(activity.getString(R.string.categories_hide_adult_done))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("WorldTV.Adult", "hide adult failed", e)
+            }
+            if (type == tab) show(type) // does nothing once this screen is gone (its scope is cancelled)
         }
     }
 

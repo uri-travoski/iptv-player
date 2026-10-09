@@ -237,6 +237,13 @@ class Prefs(private val sp: SharedPreferences) {
         get() = words("adult_entry_words") ?: AdultNames.DEFAULT_ENTRY_WORDS
         set(v) = sp.edit().putString("adult_entry_words", v.joinToString("\n")).apply()
 
+    /** New default category words for an edited list (an unedited one has them already). */
+    fun addAdultCategoryWords(added: List<String>) {
+        val current = words("adult_category_words") ?: return
+        val missing = added.filter { w -> current.none { it.equals(w, ignoreCase = true) } }
+        if (missing.isNotEmpty()) adultCategoryWords = current + missing
+    }
+
     /** null until the admin edits the list: the defaults (which may grow with app updates) apply. */
     private fun words(key: String): List<String>? =
         sp.getString(key, null)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }

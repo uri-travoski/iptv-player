@@ -14,6 +14,7 @@ class AdultNamesTest {
         listOf(
             "|+18| ✪ ADULTS", "XXX | ✪ FOR ADULTS Brazzers", "|+18| ✪ HANIME TV", "FOR Adults", "ULLU 18+",
             "ATRANGII 18+", "XXX | ✪ FOR FREE PORNIVEOS", "Philippines Movies (18+)",
+            "DASI MUJ", "XX | HINDI XX", "XX|HINDI XX",
         ).forEach { assertTrue(it, names.isAdultCategory(it)) }
     }
 
@@ -21,7 +22,7 @@ class AdultNamesTest {
     fun normalCategories() {
         listOf(
             "Adult Swim", "SPORTS | CRICKET", "|EN| ✪ COMEDY", "AFRICA | CARIBBEAN", "EUROPE | RUSSIA", "Essex & Sussex",
-            "UK | ENTERTAINMENT", "Kids",
+            "UK | ENTERTAINMENT", "Kids", "HINDI | MOVIES 24/7", "XX Factor",
         ).forEach { assertFalse(it, names.isAdultCategory(it)) }
     }
 

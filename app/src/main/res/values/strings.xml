@@ -25,8 +25,12 @@
     <string name="categories_hidden_entries">(%1$d hidden)</string>
     <string name="categories_show_all">Show all</string>
     <string name="categories_hide_all">Hide all</string>
-    <string name="categories_hide_adult">Adult words</string>
-    <string name="categories_adult_note">Adult content is hidden automatically on every load and refresh: categories and channels whose names contain the adult words (edit them with “Adult words”), and anything the provider marks as adult. It goes by name, so anything named differently is not caught: check the list yourself. What you show or hide here by hand always stays that way.</string>
+    <string name="categories_adult_words">Adult words</string>
+    <string name="categories_hide_adult">Hide adult</string>
+    <string name="categories_hide_adult_q">Hide all adult content in %1$s?</string>
+    <string name="categories_hide_adult_msg">Every adult category, channel, movie and series the adult words find (and anything the provider marks as adult) is hidden again, also what you showed by hand. Adult titles are never kept in Continue watching.</string>
+    <string name="categories_hide_adult_done">Adult content hidden</string>
+    <string name="categories_adult_note">Adult content is hidden automatically on every load and refresh: categories and channels whose names contain the adult words (edit them with “Adult words”), and anything the provider marks as adult. “Hide adult” hides all of it again, also what you showed by hand. It goes by name, so anything named differently is not caught: check the list yourself. What you show or hide here by hand always stays that way.</string>
     <string name="categories_summary">%1$d of %2$d shown</string>
     <string name="adult_words_title">Adult words</string>
     <string name="adult_words_categories">Category words</string>

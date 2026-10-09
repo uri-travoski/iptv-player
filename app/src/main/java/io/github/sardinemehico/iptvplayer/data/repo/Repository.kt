@@ -286,12 +286,88 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         } finally {
             w.endTransaction()
         }
+        forgetAdultProgress(playlistId, names)
         val shownByHand = android.database.DatabaseUtils.queryNumEntries(r, "shown_category", "playlist_id = ?", arrayOf(pl))
         android.util.Log.i(
             "WorldTV.Adult",
             "playlist $playlistId: auto-hid ${hideCats.values.sumOf { it.size }} categories, ${hideItems.values.sumOf { it.size }} entries; " +
                 "$shownByHand categories shown by hand; ${System.currentTimeMillis() - started} ms",
         )
+    }
+
+    /**
+     * The admin's "Hide adult": everything the adult rules match is hidden again, also what was
+     * shown by hand. Adult categories and entries lose their "shown" choice and become automatic
+     * hides; adult entries inside a normal category the admin showed by hand (shown whole) are
+     * hidden by hand, as that category's automatic check never looks inside.
+     */
+    suspend fun hideAllAdult(playlistId: Long, names: AdultNames) = withContext(scan) {
+        val pl = playlistId.toString()
+        val r = db.readableDatabase
+        val adultCats = HashMap<ContentType, List<String>>()
+        val adultItems = HashMap<ContentType, List<String>>()
+        val insideShown = HashMap<ContentType, List<String>>()
+        for (type in ContentType.values()) {
+            val args = arrayOf(pl, type.ordinal.toString())
+            val cats = ArrayList<String>()
+            r.rawQuery("SELECT cat_id, name FROM category WHERE playlist_id = ? AND type = ?", args).use { c ->
+                while (c.moveToNext()) if (names.isAdultCategory(c.getString(1))) cats += c.getString(0)
+            }
+            val shownCats = HashSet<String>().also { set ->
+                r.rawQuery("SELECT cat_id FROM shown_category WHERE playlist_id = ? AND type = ?", args).use { c -> while (c.moveToNext()) set += c.getString(0) }
+            }
+            shownCats.removeAll(cats.toSet())
+            val items = ArrayList<String>()
+            val inside = ArrayList<String>()
+            r.rawQuery("SELECT item_id, name, adult, category_id FROM entry WHERE playlist_id = ? AND type = ?", args).use { c ->
+                while (c.moveToNext()) {
+                    if (c.getInt(2) != 1 && !names.isAdultEntry(c.getString(1))) continue
+                    items += c.getString(0)
+                    if (c.getString(3) in shownCats) inside += c.getString(0)
+                }
+            }
+            adultCats[type] = cats
+            adultItems[type] = items
+            insideShown[type] = inside
+        }
+        val w = db.writableDatabase
+        w.beginTransaction()
+        try {
+            for (type in ContentType.values()) {
+                val t = type.ordinal.toString()
+                for (id in adultCats[type].orEmpty()) w.delete("shown_category", "playlist_id = ? AND type = ? AND cat_id = ?", arrayOf(pl, t, id))
+                for (id in adultItems[type].orEmpty()) w.delete("shown_item", "playlist_id = ? AND type = ? AND item_id = ?", arrayOf(pl, t, id))
+                insertHidden(w, "hidden_item", "item_id", playlistId, type, insideShown[type].orEmpty(), auto = false)
+            }
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
+        autoHideAdult(playlistId, names)
+    }
+
+    /** True when an entry is adult: provider flag, its name, or its category's name. */
+    private fun isAdult(playlistId: Long, type: ContentType, itemId: String, names: AdultNames): Boolean =
+        db.readableDatabase.rawQuery(
+            "SELECT e.name, e.adult, c.name FROM entry e LEFT JOIN category c ON c.playlist_id = e.playlist_id " +
+                "AND c.type = e.type AND c.cat_id = e.category_id WHERE e.playlist_id = ? AND e.type = ? AND e.item_id = ?",
+            arrayOf(playlistId.toString(), type.ordinal.toString(), itemId),
+        ).use { c ->
+            c.moveToFirst() && (c.getInt(1) == 1 || names.isAdultEntry(c.getString(0)) || (!c.isNull(2) && names.isAdultCategory(c.getString(2))))
+        }
+
+    /** Adult titles never stay in Continue watching, even when shown by hand and played. */
+    private fun forgetAdultProgress(playlistId: Long, names: AdultNames) {
+        val gone = ArrayList<Pair<Int, String>>()
+        db.readableDatabase.rawQuery("SELECT type, item_id FROM progress WHERE playlist_id = ?", arrayOf(playlistId.toString())).use { c ->
+            while (c.moveToNext()) {
+                val type = ContentType.values().getOrNull(c.getInt(0)) ?: continue
+                if (isAdult(playlistId, type, c.getString(1), names)) gone += c.getInt(0) to c.getString(1)
+            }
+        }
+        for ((type, id) in gone) {
+            db.writableDatabase.delete("progress", "playlist_id = ? AND type = ? AND item_id = ?", arrayOf(playlistId.toString(), type.toString(), id))
+        }
     }
 
     private fun adoptHidden(w: android.database.sqlite.SQLiteDatabase, playlistId: Long, names: AdultNames) {
@@ -504,7 +580,8 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
 
     /**
      * Records where playback stopped. Too early to matter (under [MIN_RESUME_MS]) or nearly
-     * finished (last [END_PERCENT]%) clears it instead, so finished titles leave the list.
+     * finished (last [END_PERCENT]%) clears it instead, so finished titles leave the list. Adult
+     * titles (by [names]) are never recorded.
      */
     suspend fun saveProgress(
         playlistId: Long,
@@ -513,8 +590,13 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         episodeId: String?,
         positionMs: Long,
         durationMs: Long,
+        names: AdultNames,
     ) = withContext(io) {
         val w = db.writableDatabase
+        if (isAdult(playlistId, type, itemId, names)) {
+            w.delete("progress", "playlist_id = ? AND type = ? AND item_id = ?", arrayOf(playlistId.toString(), type.ordinal.toString(), itemId))
+            return@withContext
+        }
         val nearEnd = durationMs > 0 && positionMs >= durationMs * END_PERCENT / 100
         if (positionMs < MIN_RESUME_MS || nearEnd) {
             // An early stop in a *different* episode shouldn't wipe the series' saved point.

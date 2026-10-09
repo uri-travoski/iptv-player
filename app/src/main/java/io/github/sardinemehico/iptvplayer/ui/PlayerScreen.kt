@@ -234,7 +234,7 @@ class PlayerScreen(
         val pos = graph.player.positionMs
         val dur = graph.player.durationMs
         val playlistId = graph.prefs.activePlaylist
-        activity.lifecycleScope.launch { graph.repo.saveProgress(playlistId, type, id, item.episodeId, pos, dur) }
+        activity.lifecycleScope.launch { graph.repo.saveProgress(playlistId, type, id, item.episodeId, pos, dur, graph.adultNames()) }
     }
 
     private fun seek(deltaMs: Long) {
