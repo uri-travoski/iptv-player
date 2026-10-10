@@ -144,6 +144,8 @@ object XtreamParser {
                 var plot: String? = null
                 var added = 0L
                 var adult = false
+                var cast: String? = null
+                var year: String? = null
                 json.fields { field ->
                     when (field) {
                         "stream_id", "series_id" -> id = json.nextStringOrNull()
@@ -159,6 +161,8 @@ object XtreamParser {
                         "plot" -> plot = json.nextStringOrNull()
                         "added", "last_modified" -> added = json.nextLongOrNull() ?: added
                         "is_adult" -> adult = json.nextLongOrNull() == 1L
+                        "cast", "actors" -> { val v = json.nextStringOrNull(); if (cast.isNullOrBlank()) cast = v }
+                        "year", "releaseDate", "release_date" -> { val v = json.nextStringOrNull(); if (year == null) year = TitleMatch.year(v) }
                         else -> json.skipValue()
                     }
                 }
@@ -178,6 +182,8 @@ object XtreamParser {
                         added = added,
                         order = order++,
                         adult = adult,
+                        cast = cast?.trim()?.takeIf { it.isNotEmpty() },
+                        year = year,
                     ),
                 )
             }

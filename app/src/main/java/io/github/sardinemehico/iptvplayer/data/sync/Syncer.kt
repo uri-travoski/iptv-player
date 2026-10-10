@@ -243,6 +243,8 @@ class Syncer(
         s.bindLong(13, e.added)
         s.bindLong(14, e.order.toLong())
         s.bindLong(15, if (e.adult) 1 else 0)
+        s.bindNullable(16, e.cast)
+        s.bindNullable(17, e.year)
         s.executeInsert()
     }
 
@@ -267,6 +269,7 @@ class Syncer(
 
         private const val INSERT_ENTRY =
             """INSERT OR REPLACE INTO entry(playlist_id, type, item_id, name, category_id, logo, stream_url,
-               epg_id, catchup_days, ext, rating, plot, added, sort, adult) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+               epg_id, catchup_days, ext, rating, plot, added, sort, adult, cast_names, year)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
     }
 }

@@ -61,7 +61,9 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
                 plot TEXT,
                 added INTEGER NOT NULL DEFAULT 0,
                 sort INTEGER NOT NULL,
-                adult INTEGER NOT NULL DEFAULT 0
+                adult INTEGER NOT NULL DEFAULT 0,
+                cast_names TEXT,
+                year TEXT
             )""",
         )
         db.execSQL("CREATE UNIQUE INDEX entry_key ON entry(playlist_id, type, item_id)")
@@ -181,6 +183,14 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
         }
         if (oldVersion < 7) createSortIndexes(db)
         if (oldVersion < 8) createGroups(db)
+        if (oldVersion < 9) {
+            // Actors (series lists carry them; movies get theirs when their page opens) and the
+            // year: for "Movies & series with <actor>". Filled by the next playlist load.
+            db.execSQL("ALTER TABLE entry ADD COLUMN cast_names TEXT")
+            db.execSQL("ALTER TABLE entry ADD COLUMN year TEXT")
+            // Due for Automatic refresh at the next start, which fills them in.
+            db.execSQL("UPDATE playlist SET last_sync = 0")
+        }
         if (oldVersion < 6) {
             // The provider's is_adult flag; and every playlist gets a PIN, 000000 by default.
             db.execSQL("ALTER TABLE entry ADD COLUMN adult INTEGER NOT NULL DEFAULT 0")
@@ -193,6 +203,6 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
     }
 
     companion object {
-        const val VERSION = 8
+        const val VERSION = 9
     }
 }

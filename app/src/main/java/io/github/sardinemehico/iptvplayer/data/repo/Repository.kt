@@ -5,6 +5,7 @@ import android.database.Cursor
 import io.github.sardinemehico.iptvplayer.data.db.Db
 import io.github.sardinemehico.iptvplayer.data.model.ContentType
 import io.github.sardinemehico.iptvplayer.data.source.AdultNames
+import io.github.sardinemehico.iptvplayer.data.source.TitleMatch
 import io.github.sardinemehico.iptvplayer.data.source.XtreamAccount
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -62,6 +63,8 @@ data class EntryRow(
     val favourite: Boolean,
     /** The provider's rating, as given (e.g. "7.3", "8.338"); null when there is none. */
     val rating: String? = null,
+    /** Movies/series: release year, when known (only filled where it is needed). */
+    val year: String? = null,
 )
 
 /** Saved playback point. [episodeId] is set for series. */
@@ -597,6 +600,80 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         )
     }
 
+    /** A movie's or series' actors from its page (the list had none): for finding it by actor later. */
+    suspend fun saveCast(playlistId: Long, type: ContentType, itemId: String, cast: String) = withContext(io) {
+        db.writableDatabase.execSQL(
+            "UPDATE entry SET cast_names = ? WHERE playlist_id = ? AND type = ? AND item_id = ? AND (cast_names IS NULL OR cast_names = '')",
+            arrayOf<Any>(cast, playlistId, type.ordinal, itemId),
+        )
+    }
+
+    // ---- an actor's titles ----
+
+    /**
+     * The movies or series of [type] whose name matches a title in [index] (an actor's films),
+     * newest film first. One scan of the library's names; hidden ones are left out.
+     */
+    suspend fun <T> matchTitles(playlistId: Long, type: ContentType, index: TitleMatch.Index<T>, yearOf: (T) -> Int): List<EntryRow> =
+        withContext(io) {
+            if (index.isEmpty) return@withContext emptyList()
+            val (where, args) = filter(playlistId, type, KEY_ALL)
+            val found = ArrayList<Pair<String, Int>>()
+            // Providers often list a film several times under the same name: show it once.
+            val names = HashSet<String>()
+            db.readableDatabase.rawQuery("SELECT e.item_id, e.name, e.year FROM entry e $where ORDER BY e.sort", args).use { c ->
+                while (c.moveToNext()) {
+                    val name = c.getString(1)
+                    val tag = index.match(name, c.getStringOrNull(2)) ?: continue
+                    if (!names.add(name.trim().lowercase())) continue
+                    found += c.getString(0) to yearOf(tag)
+                    if (found.size >= MAX_ACTOR_TITLES) break
+                }
+            }
+            val rows = rowsById(playlistId, type, found.map { it.first })
+            val year = found.toMap()
+            rows.sortedByDescending { year[it.itemId] ?: 0 }
+        }
+
+    /** Movies or series of [type] whose stored cast names [actor] (the provider's lists; no TMDB). */
+    suspend fun byCast(playlistId: Long, type: ContentType, actor: String): List<EntryRow> = withContext(io) {
+        val (where, args) = filter(playlistId, type, KEY_ALL)
+        val ids = db.readableDatabase.rawQuery(
+            "SELECT e.item_id FROM entry e $where AND e.cast_names LIKE ? ESCAPE '\\' LIMIT $MAX_ACTOR_TITLES",
+            args + ("%" + likeEscape(actor.trim()) + "%"),
+        ).use { c -> ArrayList<String>().apply { while (c.moveToNext()) add(c.getString(0)) } }
+        rowsById(playlistId, type, ids).sortedByDescending { it.year?.toIntOrNull() ?: 0 }
+    }
+
+    private fun rowsById(playlistId: Long, type: ContentType, ids: List<String>): List<EntryRow> {
+        if (ids.isEmpty()) return emptyList()
+        val out = ArrayList<EntryRow>(ids.size)
+        for (chunk in ids.chunked(500)) {
+            db.readableDatabase.rawQuery(
+                """SELECT e.item_id, e.name, e.logo, e.stream_url, e.ext, e.catchup_days,
+                   EXISTS(SELECT 1 FROM favourite f WHERE f.playlist_id = e.playlist_id
+                          AND f.type = e.type AND f.item_id = e.item_id), e.rating, e.year
+                   FROM entry e WHERE e.playlist_id = ? AND e.type = ? AND e.item_id IN (${chunk.joinToString(",") { "?" }})""",
+                arrayOf(playlistId.toString(), type.ordinal.toString()) + chunk,
+            ).use { c ->
+                while (c.moveToNext()) {
+                    out += EntryRow(
+                        itemId = c.getString(0),
+                        name = c.getString(1),
+                        logo = c.getStringOrNull(2),
+                        streamUrl = c.getStringOrNull(3),
+                        ext = c.getStringOrNull(4),
+                        catchupDays = c.getInt(5),
+                        favourite = c.getInt(6) != 0,
+                        rating = c.getStringOrNull(7),
+                        year = c.getStringOrNull(8) ?: TitleMatch.year(c.getString(1)),
+                    )
+                }
+            }
+        }
+        return out
+    }
+
     // ---- history and reset ----
 
     /** Clear history: Continue watching of [types] in every playlist. Favourites and groups stay. */
@@ -838,6 +915,9 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         fun groupId(key: String?): Long? = key?.takeIf { it.startsWith(GROUP_PREFIX) }?.removePrefix(GROUP_PREFIX)?.toLongOrNull()
 
         /** List key for a name search, usable wherever a category key is. */
+        /** At most this many titles on an actor's page. */
+        const val MAX_ACTOR_TITLES = 300
+
         fun searchKey(query: String) = SEARCH_PREFIX + query.trim()
 
         fun isSearch(key: String) = key.startsWith(SEARCH_PREFIX)

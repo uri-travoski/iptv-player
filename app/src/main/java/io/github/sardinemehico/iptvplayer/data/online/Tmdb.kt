@@ -1,6 +1,7 @@
 package io.github.sardinemehico.iptvplayer.data.online
 
 import io.github.sardinemehico.iptvplayer.Prefs
+import io.github.sardinemehico.iptvplayer.data.source.TitleMatch
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
@@ -19,7 +20,13 @@ import java.util.Locale
  */
 class Tmdb(private val http: OkHttpClient, private val io: CoroutineDispatcher, private val prefs: Prefs) {
 
-    data class CastMember(val name: String, val photo: String?)
+    /** [id]: TMDB's person id, for their filmography (null when the cast didn't come from TMDB). */
+    data class CastMember(val name: String, val photo: String?, val id: Long? = null)
+
+    /** One film or series an actor played in. */
+    data class Credit(val title: String, val originalTitle: String?, val year: String?, val series: Boolean)
+
+    data class Person(val id: Long, val name: String, val photo: String?, val credits: List<Credit>)
 
     data class Extras(val tmdbId: String, val rating: String?, val trailer: String?, val cast: List<CastMember>)
 
@@ -28,6 +35,38 @@ class Tmdb(private val http: OkHttpClient, private val io: CoroutineDispatcher, 
     val isSetUp get() = rotation.isSetUp
 
     private val cache = HashMap<String, Extras?>()
+    private val people = HashMap<String, Person?>()
+
+    /**
+     * Everything [name] acted in (TMDB's combined credits: movies and TV), by their TMDB [id] when
+     * the page's cast came from TMDB, else found by name. Null when TMDB doesn't know them.
+     */
+    suspend fun person(id: Long?, name: String): Person? = withContext(io) {
+        val key = id?.toString() ?: name.lowercase()
+        synchronized(people) { if (key in people) return@withContext people[key] }
+        val result = rotation.run { account ->
+            val pid = id ?: get(account, url("/3/search/person").addQueryParameter("query", name))
+                ?.optJSONArray("results")?.optJSONObject(0)?.optLong("id")?.takeIf { it > 0 }
+                ?: return@run null
+            val json = get(account, url("/3/person/$pid").addQueryParameter("append_to_response", "combined_credits")) ?: return@run null
+            val cast = json.optJSONObject("combined_credits")?.optJSONArray("cast")
+            val credits = ArrayList<Credit>()
+            if (cast != null) {
+                for (i in 0 until cast.length()) {
+                    val c = cast.optJSONObject(i) ?: continue
+                    val series = c.optString("media_type") == "tv"
+                    val title = c.optString(if (series) "name" else "title").ifEmpty { continue }
+                    val original = c.optString(if (series) "original_name" else "original_title").takeIf { it.isNotEmpty() && it != title }
+                    val year = TitleMatch.year(c.optString(if (series) "first_air_date" else "release_date"))
+                    credits += Credit(title, original, year, series)
+                }
+            }
+            val path = json.optString("profile_path").takeIf { it.startsWith("/") }
+            Person(pid, json.optString("name").ifEmpty { name }, path?.let { "$IMAGES/w185$it" }, credits)
+        }
+        synchronized(people) { people[key] = result }
+        result
+    }
 
     /** Page extras by the provider's [tmdbId], else by [title] and [year]; null when TMDB doesn't know the title. */
     suspend fun extras(series: Boolean, tmdbId: String?, title: String, year: String?): Extras? = withContext(io) {
@@ -83,7 +122,7 @@ class Tmdb(private val http: OkHttpClient, private val io: CoroutineDispatcher, 
                 val c = castJson.optJSONObject(i) ?: continue
                 val name = c.optString("name").ifEmpty { continue }
                 val path = c.optString("profile_path").takeIf { it.startsWith("/") }
-                cast += CastMember(name, path?.let { "$IMAGES/w185$it" })
+                cast += CastMember(name, path?.let { "$IMAGES/w185$it" }, c.optLong("id").takeIf { it > 0 })
             }
         }
         return Extras(id, rating, trailer, cast)

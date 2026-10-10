@@ -21,6 +21,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
@@ -63,9 +64,11 @@ class PlayerController(context: Context, http: OkHttpClient) {
         // Streams over OkHttp; local files too (downloaded subtitles), which OkHttp can't open.
         val dataSource = DefaultDataSource.Factory(context, OkHttpDataSource.Factory(streamHttp).setUserAgent(Syncer.USER_AGENT))
         // Live TS often has key (IDR) frames only every few seconds; starting on any intra frame
-        // shows the picture sooner after a zap.
+        // shows the picture sooner after a zap. Not FLAG_DETECT_ACCESS_UNITS: on streams that
+        // mark their frames (AUD) it cut each frame into ~2.5 samples, and the Allwinner decoder
+        // fell behind on 1080p50/60 channels (most frames dropped, sound out of sync, rebuffering).
         val extractors = DefaultExtractorsFactory().setTsExtractorFlags(
-            DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS,
+            DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES,
         )
         val mediaSources = DefaultMediaSourceFactory(dataSource, extractors)
             .setLoadErrorHandlingPolicy(IptvLoadErrorPolicy())
@@ -90,6 +93,24 @@ class PlayerController(context: Context, http: OkHttpClient) {
                 true,
             )
             .build()
+        // Smoothness in the log (adb logcat -s WorldTV.Player): dropped frames, audio gaps, decoders.
+        player.addAnalyticsListener(object : AnalyticsListener {
+            override fun onDroppedVideoFrames(eventTime: AnalyticsListener.EventTime, droppedFrames: Int, elapsedMs: Long) {
+                Log.i(TAG, "dropped $droppedFrames frames in ${elapsedMs}ms")
+            }
+
+            override fun onAudioUnderrun(eventTime: AnalyticsListener.EventTime, bufferSize: Int, bufferSizeMs: Long, elapsedSinceLastFeedMs: Long) {
+                Log.i(TAG, "audio underrun (${elapsedSinceLastFeedMs}ms since last feed)")
+            }
+
+            override fun onVideoDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
+                Log.i(TAG, "video decoder $decoderName")
+            }
+
+            override fun onAudioDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
+                Log.i(TAG, "audio decoder $decoderName")
+            }
+        })
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 Log.i(TAG, "state ${stateName(playbackState)} +${sincePlay()}ms")
@@ -115,6 +136,10 @@ class PlayerController(context: Context, http: OkHttpClient) {
             }
 
             override fun onTracksChanged(tracks: Tracks) {
+                Log.i(TAG, "tracks: " + tracks.groups.joinToString { g ->
+                    val f = g.getTrackFormat(0)
+                    "${f.sampleMimeType}${f.language?.let { "/$it" } ?: ""}${if (g.isSelected) "*" else ""}"
+                })
                 val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
                 if (audio.isNotEmpty() && audio.none { it.isSupported }) {
                     for (l in listeners.toList()) l.onAudioUnsupported()

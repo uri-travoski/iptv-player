@@ -157,6 +157,8 @@ class VodDetailScreen(
                 info = graph.syncer.vodInfo(playlist, row.itemId)
             }
             showInfo()
+            // The actors, so this title turns up on their pages (series lists usually have them already).
+            info?.cast?.takeIf { it.isNotBlank() }?.let { graph.repo.saveCast(playlist.id, type, row.itemId, it) }
             // A rating the list came without: keep it, so the poster shows it from now on.
             val r = info?.rating
             if (r != null && details?.rating == null) graph.repo.saveRating(playlist.id, type, row.itemId, r)
@@ -197,7 +199,8 @@ class VodDetailScreen(
             graph.repo.saveRating(playlist.id, type, row.itemId, tmdbRating)
         }
         if (ex != null && ex.cast.isNotEmpty()) {
-            showCast(ex.cast.map { it.name }, ex.cast.associate { it.name to it.photo })
+            showCast(ex.cast.map { it.name }, ex.cast.associate { it.name to it.photo }, ex.cast.associate { it.name to it.id })
+            if (i?.cast.isNullOrBlank()) graph.repo.saveCast(playlist.id, type, row.itemId, ex.cast.joinToString(", ") { it.name })
         } else {
             showCast(CastPhotos.split(i?.cast), null)
         }
@@ -223,13 +226,18 @@ class VodDetailScreen(
     /**
      * The cast as photos with names (from TMDB with the cast, else Wikipedia, looked up once per page;
      * a name with no photo shows its initials). Movies: a row under the buttons. TV series: 3 across under the
-     * poster, so the episode list keeps its room.
+     * poster, so the episode list keeps its room. OK on a photo: the actor's other titles here.
      */
-    private fun showCast(all: List<String>, known: Map<String, String?>?) {
+    private fun showCast(all: List<String>, known: Map<String, String?>?, ids: Map<String, Long?> = emptyMap()) {
         val names = all.take(if (isEpisodic && castSide != null) 6 else 12)
         if (names.isEmpty()) return
         val side = if (isEpisodic) castSide else null
-        val views = names.associateWith { castItem(it, small = side != null) }
+        val photoOf = HashMap<String, String?>()
+        val views = names.associateWith { name ->
+            castItem(name, small = side != null).apply {
+                setOnClickListener { activity.push(ActorScreen(activity, playlist, name, ids[name], photoOf[name])) }
+            }
+        }
         if (side != null) {
             side.removeAllViews()
             names.chunked(3).forEach { chunk ->
@@ -248,6 +256,7 @@ class VodDetailScreen(
             val photos = known ?: graph.castPhotos.lookup(names)
             for ((name, url) in photos) {
                 if (url == null) continue
+                photoOf[name] = url
                 val v = views[name] ?: continue
                 v.findViewById<ImageView>(R.id.cast_photo).load(url) {
                     listener(onSuccess = { _, _ -> v.findViewById<View>(R.id.cast_initials).visibility = View.GONE })

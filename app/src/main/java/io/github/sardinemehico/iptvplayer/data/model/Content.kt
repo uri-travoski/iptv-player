@@ -37,4 +37,8 @@ data class Entry(
     val order: Int = 0,
     /** The provider marks it adult (Xtream `is_adult`). Hidden by default. */
     val adult: Boolean = false,
+    /** Movies/series: actors as the provider lists them ("A, B, C"); series lists carry it. */
+    val cast: String? = null,
+    /** Movies/series: release year when the provider gives one (else it may be in [name]). */
+    val year: String? = null,
 )

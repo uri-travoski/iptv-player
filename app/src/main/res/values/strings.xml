@@ -303,4 +303,19 @@
         <item quantity="one">%1$d app slot</item>
         <item quantity="other">%1$d app slots</item>
     </plurals>
+
+    <!-- Actor page (OK on a cast photo) -->
+    <string name="actor_looking">Looking for %1$s on this playlist…</string>
+    <string name="actor_on_playlist">on this playlist</string>
+    <string name="actor_none">Nothing with %1$s on this playlist.</string>
+    <string name="actor_needs_tmdb">Only titles whose cast lists them. Add a TMDB key in Settings › Online accounts to find all of their films.</string>
+    <string name="actor_tmdb_failed">TMDB didn\'t answer: only titles whose cast lists them.</string>
+    <plurals name="movies_n">
+        <item quantity="one">%1$d movie</item>
+        <item quantity="other">%1$d movies</item>
+    </plurals>
+    <plurals name="series_n">
+        <item quantity="one">%1$d series</item>
+        <item quantity="other">%1$d series</item>
+    </plurals>
 </resources>
