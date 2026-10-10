@@ -49,6 +49,11 @@ data class VodInfo(
     val image: String? = null,
     /** Movies only: the file extension the panel serves, e.g. "mkv". */
     val containerExt: String? = null,
+    /** YouTube video id (or link) of the trailer, when the panel has one. */
+    val trailer: String? = null,
+    /** TMDB / IMDb ids, when the panel has them: used to find online subtitles. */
+    val tmdbId: String? = null,
+    val imdbId: String? = null,
 )
 
 /**
@@ -135,6 +140,7 @@ object XtreamParser {
                 var archiveDays = 0
                 var ext: String? = null
                 var rating: String? = null
+                var rating5: String? = null
                 var plot: String? = null
                 var added = 0L
                 var adult = false
@@ -149,6 +155,7 @@ object XtreamParser {
                         "tv_archive_duration" -> archiveDays = json.nextLongOrNull()?.toInt() ?: 0
                         "container_extension" -> ext = json.nextStringOrNull()
                         "rating" -> rating = json.nextStringOrNull()
+                        "rating_5based" -> rating5 = json.nextStringOrNull()
                         "plot" -> plot = json.nextStringOrNull()
                         "added", "last_modified" -> added = json.nextLongOrNull() ?: added
                         "is_adult" -> adult = json.nextLongOrNull() == 1L
@@ -166,7 +173,7 @@ object XtreamParser {
                         epgId = epgId?.trim()?.takeIf { it.isNotEmpty() },
                         catchupDays = if (archive) archiveDays.coerceAtLeast(1) else 0,
                         containerExt = ext?.trim()?.takeIf { it.isNotEmpty() },
-                        rating = rating?.trim()?.takeIf { it.isNotEmpty() && it != "0" },
+                        rating = Ratings.fromPanel(rating, rating5),
                         plot = plot?.trim()?.takeIf { it.isNotEmpty() },
                         added = added,
                         order = order++,
@@ -237,7 +244,11 @@ object XtreamParser {
         var cast: String? = null
         var director: String? = null
         var rating: String? = null
+        var rating5: String? = null
         var image: String? = null
+        var trailer: String? = null
+        var tmdb: String? = null
+        var imdb: String? = null
         fun keep(old: String?, new: String?) = old?.takeIf { it.isNotBlank() } ?: new?.trim()?.takeIf { it.isNotEmpty() }
         json.fields { f ->
             when (f) {
@@ -249,7 +260,11 @@ object XtreamParser {
                 "cast", "actors" -> cast = keep(cast, json.nextStringOrNull())
                 "director" -> director = keep(director, json.nextStringOrNull())
                 "rating" -> rating = keep(rating, json.nextStringOrNull())
+                "rating_5based" -> rating5 = keep(rating5, json.nextStringOrNull())
                 "movie_image", "cover_big", "cover" -> image = keep(image, json.nextStringOrNull())
+                "youtube_trailer", "trailer" -> trailer = keep(trailer, json.nextStringOrNull())
+                "tmdb_id", "tmdb" -> tmdb = keep(tmdb, json.nextStringOrNull())
+                "imdb_id" -> imdb = keep(imdb, json.nextStringOrNull())
                 else -> json.skipValue()
             }
         }
@@ -258,7 +273,12 @@ object XtreamParser {
             val mins = if (durationSecs > 600) durationSecs / 60 else durationSecs
             duration = if (mins >= 60) "${mins / 60}h ${mins % 60}m" else "${mins}m"
         }
-        return VodInfo(plot, genre, released, duration, cast, director, rating?.takeIf { it != "0" }, image)
+        return VodInfo(
+            plot, genre, released, duration, cast, director, Ratings.fromPanel(rating, rating5), image,
+            trailer = trailer?.takeIf { it != "0" },
+            tmdbId = tmdb?.takeIf { it.any(Char::isDigit) && it != "0" },
+            imdbId = imdb?.takeIf { it.startsWith("tt") },
+        )
     }
 
     fun parseSeriesEpisodes(reader: Reader, onEach: (Episode) -> Unit) {

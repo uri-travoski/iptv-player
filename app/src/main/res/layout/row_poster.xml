@@ -21,6 +21,22 @@
             android:importantForAccessibility="no"
             android:scaleType="centerCrop" />
 
+        <!-- Rating badge: "★ 7.3", shown only when the provider gives one. -->
+        <TextView
+            android:id="@+id/rating"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:background="@drawable/bg_rating"
+            android:paddingStart="6dp"
+            android:paddingTop="1dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="1dp"
+            android:textColor="#FFFFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/fav"
             android:layout_width="wrap_content"

@@ -15,8 +15,6 @@ import io.github.sardinemehico.iptvplayer.data.model.ContentType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.DateFormat
-import java.util.Date
 
 /**
  * Live TV · Movies · Series on top. Below, rows of 5: the first holds the user's first app and,
@@ -66,6 +64,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         (lastFocusTag?.let { root.findViewWithTag<View>(it) } ?: live).requestFocus()
         scope.launch { showAccount() }
         scope.launch { showSlots() } // an app may have been installed or removed meanwhile
+        scope.launch { autoRefresh() }
         shown = true
         // Update check: once per start, in the background, offered only on the home screen.
         AppUpdates.offerPending(activity, scope)
@@ -104,7 +103,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         if (mobile) {
             val row = newRow(0)
             addFixed(row, 0, "reload", R.drawable.ic_refresh, R.string.reload_playlist) { reloadPlaylist() }
-            addFixed(row, 1, "settings", R.drawable.ic_settings_small, R.string.settings) { activity.push(PlaylistsScreen(activity)) }
+            addFixed(row, 1, "settings", R.drawable.ic_settings_small, R.string.settings) { activity.push(SettingsScreen(activity)) }
             slots = emptyList()
             slotApps = emptyList()
             return
@@ -114,7 +113,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         val first = newRow(0)
         list += addSlot(first, 0, 0)
         addFixed(first, 1, "reload", R.drawable.ic_refresh, R.string.reload_playlist) { reloadPlaylist() }
-        addFixed(first, 2, "settings", R.drawable.ic_settings_small, R.string.settings) { activity.push(PlaylistsScreen(activity)) }
+        addFixed(first, 2, "settings", R.drawable.ic_settings_small, R.string.settings) { activity.push(SettingsScreen(activity)) }
         addFixed(first, 3, "allapps", R.drawable.ic_all_apps, R.string.all_apps) { showAllApps() }
         addFixed(first, 4, "system", R.drawable.ic_android_settings, R.string.android_settings_short) { Apps.openAndroidSettings(activity) }
         // Any more apps: rows of 5 underneath.
@@ -291,22 +290,40 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     private suspend fun showAccount() {
         val p = graph.repo.playlist(graph.prefs.activePlaylist) ?: return
         val parts = arrayListOf(p.name)
-        p.expires?.let { parts += "Expires " + DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it * 1000)) }
+        p.expires?.let { parts += "Expires " + Dates.day(it * 1000) }
         if (p.maxConnections > 0) parts += "${p.maxConnections} connection" + if (p.maxConnections > 1) "s" else ""
         account.text = parts.joinToString("  ·  ")
+    }
+
+    /**
+     * Settings > Automatic refresh: reloads the active playlist when it is due (every start, every
+     * day, or every 2 days). Checked whenever the home screen shows, so a box left on for days
+     * still refreshes. Runs like Reload playlist: in the background, lists usable meanwhile.
+     */
+    private suspend fun autoRefresh() {
+        if (reloading || graph.syncing) return
+        val p = graph.repo.playlist(graph.prefs.activePlaylist) ?: return
+        val due = io.github.sardinemehico.iptvplayer.AutoRefresh.isDue(
+            graph.prefs.autoRefresh, p.lastSync, System.currentTimeMillis(), p.id in graph.autoRefreshedThisRun,
+        )
+        if (!due) return
+        android.util.Log.i("WorldTV.Refresh", "auto-refresh ${p.name} (${graph.prefs.autoRefresh}, last ${if (p.lastSync > 0) Dates.dayTime(p.lastSync) else "never"})")
+        graph.autoRefreshedThisRun += p.id
+        reloadPlaylist(auto = true)
     }
 
     /**
      * Downloads the active playlist again: channels, movies, series and their links.
      * Favourites and Continue watching are kept. The old lists stay usable until it finishes.
      */
-    private fun reloadPlaylist() {
-        if (reloading) return
+    private fun reloadPlaylist(auto: Boolean = false) {
+        if (reloading || graph.syncing) return
         reloading = true
+        graph.syncing = true
         activity.keepScreenOn(true) // a phone that sleeps mid-reload drops the connection
         busy.visibility = View.VISIBLE
         reloadStatus.setTextColor(activity.getColor(R.color.text_secondary))
-        reloadStatus.setText(R.string.reloading)
+        reloadStatus.setText(if (auto) R.string.auto_refreshing else R.string.reloading)
         scope.launch {
             try {
                 val p = graph.repo.playlist(graph.prefs.activePlaylist)
@@ -315,7 +332,8 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
                     return@launch
                 }
                 graph.syncer.sync(p) { text -> activity.runOnUiThread { reloadStatus.text = text } }
-                reloadStatus.setText(R.string.reload_done)
+                graph.autoRefreshedThisRun += p.id
+                reloadStatus.setText(if (auto) R.string.auto_refresh_done else R.string.reload_done)
                 showAccount()
             } catch (e: CancellationException) {
                 throw e
@@ -324,6 +342,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
                 reloadStatus.text = activity.getString(R.string.reload_failed, e.message ?: e.javaClass.simpleName)
             } finally {
                 reloading = false
+                graph.syncing = false
                 activity.keepScreenOn(false)
                 busy.visibility = View.GONE
             }

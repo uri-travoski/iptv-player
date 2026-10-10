@@ -13,6 +13,8 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
+        <include layout="@layout/tab_bar" />
+
         <!-- Transparent hole: the PlayerView is positioned exactly under this view (16:9). -->
         <View
             android:id="@+id/preview"

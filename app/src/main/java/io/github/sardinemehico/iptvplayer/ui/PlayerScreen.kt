@@ -25,6 +25,8 @@ class PlayItem(
     val type: ContentType? = null,
     val itemId: String? = null,
     val episodeId: String? = null,
+    /** Movies and episodes: what to look up online subtitles by (Subtitles > Search online). */
+    val subs: io.github.sardinemehico.iptvplayer.data.online.SubQuery? = null,
 )
 
 /**
@@ -257,7 +259,66 @@ class PlayerScreen(
 
     private fun chooseTrack(type: Int) {
         handler.removeCallbacks(hide)
-        PlayerUi.chooseTrack(activity, type) { scheduleHide() }
+        val query = items[index].subs
+        PlayerUi.chooseTrack(activity, type, onSearchOnline = query?.let { q -> { searchSubtitles(q) } }) { scheduleHide() }
+    }
+
+    /**
+     * Subtitles > Search online: OpenSubtitles results in the preferred language (then English),
+     * pick one and it is added to the movie at the current position. Needs the user's own API key
+     * (Settings > Subtitle settings); without one this explains how to get it.
+     */
+    private fun searchSubtitles(q: io.github.sardinemehico.iptvplayer.data.online.SubQuery) {
+        val subs = graph.openSubs
+        if (!subs.isSetUp) {
+            android.app.AlertDialog.Builder(activity)
+                .setTitle(R.string.subs_online_title)
+                .setMessage(R.string.subs_online_needs_key)
+                .setPositiveButton(android.R.string.ok, null)
+                .setOnDismissListener { scheduleHide() }
+                .show()
+            return
+        }
+        val lang = graph.prefs.subsLanguage.ifEmpty { java.util.Locale.getDefault().language }.ifEmpty { "en" }
+        activity.toast(activity.getString(R.string.subs_searching))
+        activity.lifecycleScope.launch {
+            try {
+                var results = subs.search(q, lang)
+                if (results.isEmpty() && lang != "en") results = subs.search(q, "en")
+                if (results.isEmpty()) {
+                    activity.toast(activity.getString(R.string.subs_none_found, q.title))
+                    return@launch scheduleHide()
+                }
+                val top = results.take(25)
+                val labels = top.map { r ->
+                    val hi = if (r.hearingImpaired) " · HI" else ""
+                    "${r.language.uppercase()}$hi · ${r.release.take(70)}  (${r.downloads}↓)"
+                }.toTypedArray()
+                android.app.AlertDialog.Builder(activity)
+                    .setTitle(activity.getString(R.string.subs_results, q.title))
+                    .setItems(labels) { _, which ->
+                        activity.lifecycleScope.launch {
+                            try {
+                                val file = subs.download(top[which])
+                                graph.player.addSubtitle(file, top[which].language.take(2))
+                                activity.toast(activity.getString(R.string.subs_added))
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                activity.toast(e.message ?: activity.getString(R.string.subs_failed))
+                            }
+                            scheduleHide()
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> scheduleHide() }
+                    .show()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                activity.toast(e.message ?: activity.getString(R.string.subs_failed))
+                scheduleHide()
+            }
+        }
     }
 
     /** Title and progress; with [focusControls] the buttons take focus so OK presses them. */

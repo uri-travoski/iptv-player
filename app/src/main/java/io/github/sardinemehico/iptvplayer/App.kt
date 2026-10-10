@@ -15,6 +15,8 @@ import coil3.request.crossfade
 import io.github.sardinemehico.iptvplayer.data.db.Db
 import io.github.sardinemehico.iptvplayer.data.model.ContentType
 import io.github.sardinemehico.iptvplayer.data.net.AppDns
+import io.github.sardinemehico.iptvplayer.data.online.CastPhotos
+import io.github.sardinemehico.iptvplayer.data.online.OpenSubtitles
 import io.github.sardinemehico.iptvplayer.data.repo.Repository
 import io.github.sardinemehico.iptvplayer.data.repo.Sort
 import io.github.sardinemehico.iptvplayer.data.source.AdultNames
@@ -126,6 +128,21 @@ class AppGraph(private val app: Application) {
         done()
     }
     val syncer: Syncer by lazy { Syncer(http, db, repo, io) { adultNames() } }
+
+    /** Online subtitles (the user's own OpenSubtitles key). */
+    val openSubs by lazy {
+        val version = app.packageManager.getPackageInfo(app.packageName, 0).versionName
+        OpenSubtitles(http, io, prefs, app.cacheDir, "WorldTV v$version")
+    }
+
+    /** Cast photos for movie and series pages (Wikipedia; needs a descriptive User-Agent). */
+    val castPhotos by lazy { CastPhotos(imageHttp, io) }
+
+    /** Playlists reloaded automatically since the app started (Settings > Automatic refresh). */
+    val autoRefreshedThisRun = HashSet<Long>()
+
+    /** True while a playlist is being downloaded (manual Reload or automatic refresh). */
+    @Volatile var syncing = false
     val player: PlayerController by lazy { PlayerController(app, http) }
     val prefs: Prefs by lazy { Prefs(app.getSharedPreferences("app", Context.MODE_PRIVATE)) }
 
@@ -263,4 +280,90 @@ class Prefs(private val sp: SharedPreferences) {
     var resizeMode: Int
         get() = sp.getInt("resize_mode", 0)
         set(v) = sp.edit().putInt("resize_mode", v).apply()
+
+    /**
+     * Live channel order (Settings > Live channel sort): Sort.PROVIDER (the provider's order),
+     * NAME (A–Z) or NAME_DESC (Z–A). A setting, not part of the playlist: reloads keep it.
+     */
+    var liveSort: Sort
+        get() = sp.getString("live_sort", null)?.let { s -> Sort.values().firstOrNull { it.name == s } }
+            ?.takeIf { it == Sort.NAME || it == Sort.NAME_DESC } ?: Sort.PROVIDER
+        set(v) = sp.edit().putString("live_sort", v.name).apply()
+
+    /** Settings > Automatic refresh: AutoRefresh.EVERY_START, DAILY or EVERY_2_DAYS (default). */
+    var autoRefresh: String
+        get() = sp.getString("auto_refresh", null)?.takeIf { it in AutoRefresh.MODES } ?: AutoRefresh.EVERY_2_DAYS
+        set(v) = sp.edit().putString("auto_refresh", v).apply()
+
+    // ---- subtitles (Settings > Subtitle settings) ----
+
+    /** Show subtitles automatically when a stream has them in [subsLanguage] (else only when picked). */
+    var subsEnabled: Boolean
+        get() = sp.getBoolean("subs_enabled", true)
+        set(v) = sp.edit().putBoolean("subs_enabled", v).apply()
+
+    /** Size step, Subtitles.SIZES index (1 = normal). */
+    var subsSize: Int
+        get() = sp.getInt("subs_size", 1)
+        set(v) = sp.edit().putInt("subs_size", v).apply()
+
+    /** Text colour, Subtitles.COLORS index (0 = white). */
+    var subsColor: Int
+        get() = sp.getInt("subs_color", 0)
+        set(v) = sp.edit().putInt("subs_color", v).apply()
+
+    /** Background, Subtitles.BACKGROUNDS index (0 = outline only). */
+    var subsBackground: Int
+        get() = sp.getInt("subs_background", 0)
+        set(v) = sp.edit().putInt("subs_background", v).apply()
+
+    /** Preferred subtitle language (ISO 639-1, e.g. "en"); empty = the box's language. */
+    var subsLanguage: String
+        get() = sp.getString("subs_language", "").orEmpty()
+        set(v) = sp.edit().putString("subs_language", v).apply()
+
+    /** OpenSubtitles.com API key for online subtitles (free, the user's own); empty = off. */
+    var openSubsKey: String
+        get() = sp.getString("opensubs_key", "").orEmpty()
+        set(v) = sp.edit().putString("opensubs_key", v.trim()).apply()
+
+    /** Optional OpenSubtitles account: more downloads per day than without one. */
+    var openSubsUser: String
+        get() = sp.getString("opensubs_user", "").orEmpty()
+        set(v) = sp.edit().putString("opensubs_user", v.trim()).apply()
+
+    var openSubsPassword: String
+        get() = sp.getString("opensubs_password", "").orEmpty()
+        set(v) = sp.edit().putString("opensubs_password", v).apply()
+
+    /** Reset app: everything back to a fresh install, except the TV / Mobile layout choice. */
+    fun resetAll() {
+        val mode = uiMode
+        sp.edit().clear().putString("ui_mode", mode).apply()
+    }
+}
+
+/** Settings > Automatic refresh: when the active playlist is downloaded again by itself. */
+object AutoRefresh {
+    const val EVERY_START = "start"
+    const val DAILY = "daily"
+    const val EVERY_2_DAYS = "2days"
+    val MODES = listOf(EVERY_START, DAILY, EVERY_2_DAYS)
+
+    private const val DAY_MS = 24L * 60 * 60 * 1000
+
+    /**
+     * True when a playlist last loaded at [lastSyncMs] should load again now. [refreshedThisRun]:
+     * already reloaded since the app started (EVERY_START does it once per start, not on every
+     * return to the home screen). A clock set back counts as due rather than never.
+     */
+    fun isDue(mode: String, lastSyncMs: Long, nowMs: Long, refreshedThisRun: Boolean): Boolean {
+        if (refreshedThisRun) return false
+        if (lastSyncMs <= 0 || nowMs < lastSyncMs) return true
+        return when (mode) {
+            EVERY_START -> true
+            DAILY -> nowMs - lastSyncMs >= DAY_MS
+            else -> nowMs - lastSyncMs >= 2 * DAY_MS
+        }
+    }
 }

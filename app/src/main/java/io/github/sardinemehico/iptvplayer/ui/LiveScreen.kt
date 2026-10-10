@@ -76,6 +76,8 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     private val cats = CategoryList(categoryAdapter) { activity.getString(R.string.search_results, it) }
 
     private var playlist: Playlist? = null
+    /** Settings > Live channel sort, read once per visit (the order can't change while here). */
+    private val liveSort = graph.prefs.liveSort
     private var urls: XtreamUrls? = null
     private var liveExt = "ts"
     private var categoryIndex = -1
@@ -114,6 +116,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     }
 
     init {
+        TabBar.bind(activity, root, TabBar.Tab.LIVE)
         categoriesView.layoutManager = LinearLayoutManager(activity, if (mobile) RecyclerView.HORIZONTAL else RecyclerView.VERTICAL, false)
         categoriesView.adapter = categoryAdapter
         categoriesView.itemAnimator = null
@@ -240,9 +243,9 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
 
         // Restore the last channel and play it in the preview.
         val lastItem = graph.prefs.lastLiveItem
-        val index = if (lastItem != null) graph.repo.indexOf(p.id, ContentType.LIVE, categoryKey, lastItem) else -1
+        val index = if (lastItem != null) graph.repo.indexOf(p.id, ContentType.LIVE, categoryKey, lastItem, liveSort) else -1
         if (index >= 0) {
-            val row = graph.repo.page(p.id, ContentType.LIVE, categoryKey, index, 1).firstOrNull()
+            val row = graph.repo.page(p.id, ContentType.LIVE, categoryKey, index, 1, liveSort).firstOrNull()
             if (row != null) play(index, row)
             focusChannel(index)
         } else {
@@ -342,7 +345,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         channelCount = count
         categoryTitle.text = "$name  ($count)"
         empty.visibility = if (count == 0) View.VISIBLE else View.GONE
-        channelAdapter.reset(count) { offset, limit -> graph.repo.page(p.id, ContentType.LIVE, key, offset, limit) }
+        channelAdapter.reset(count) { offset, limit -> graph.repo.page(p.id, ContentType.LIVE, key, offset, limit, liveSort) }
         channelAdapter.playingItemId = playingRow?.itemId
         channelsView.scrollToPosition(0)
     }
@@ -408,7 +411,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
             return
         }
         scope.launch {
-            val row = graph.repo.page(p.id, ContentType.LIVE, categoryKey, next, 1).firstOrNull() ?: return@launch
+            val row = graph.repo.page(p.id, ContentType.LIVE, categoryKey, next, 1, liveSort).firstOrNull() ?: return@launch
             play(next, row)
         }
     }

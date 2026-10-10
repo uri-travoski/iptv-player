@@ -32,6 +32,8 @@ data class Playlist(
     companion object {
         const val KIND_XTREAM = "xtream"
         const val KIND_M3U = "m3u"
+        /** The built-in sample playlist (Reset app): no server, made up locally. */
+        const val KIND_DEMO = "demo"
     }
 }
 
@@ -41,7 +43,7 @@ data class CategoryRow(val key: String, val name: String)
 data class Group(val id: Long, val name: String)
 
 /** Order of a Movies / Series list (App: the Sort button). */
-enum class Sort { NEWEST, RATING, NAME, PROVIDER }
+enum class Sort { NEWEST, RATING, NAME, NAME_DESC, PROVIDER }
 
 /** A category as the admin sees it: hidden or not, and how many of its entries are hidden. */
 data class AdminCategory(val row: CategoryRow, val hidden: Boolean, val hiddenEntries: Int)
@@ -58,13 +60,15 @@ data class EntryRow(
     val ext: String?,
     val catchupDays: Int,
     val favourite: Boolean,
+    /** The provider's rating, as given (e.g. "7.3", "8.338"); null when there is none. */
+    val rating: String? = null,
 )
 
 /** Saved playback point. [episodeId] is set for series. */
 data class Progress(val episodeId: String?, val positionMs: Long, val durationMs: Long)
 
 /** The stored fields a movie or series page shows before (or without) the panel's info call. */
-data class EntryDetails(val rating: String?, val plot: String?, val ext: String?)
+data class EntryDetails(val rating: String?, val plot: String?, val ext: String?, val added: Long = 0)
 
 /**
  * All database reads and writes. Every call runs on [io]; nothing here may be called
@@ -528,7 +532,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             db.readableDatabase.rawQuery(
                 """SELECT e.item_id, e.name, e.logo, e.stream_url, e.ext, e.catchup_days,
                    EXISTS(SELECT 1 FROM favourite f WHERE f.playlist_id = e.playlist_id
-                          AND f.type = e.type AND f.item_id = e.item_id)
+                          AND f.type = e.type AND f.item_id = e.item_id), e.rating
                    FROM entry e $where ORDER BY ${order(key, sort)} LIMIT $limit OFFSET $offset""",
                 args,
             ).use { c ->
@@ -542,6 +546,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
                         ext = c.getStringOrNull(4),
                         catchupDays = c.getInt(5),
                         favourite = c.getInt(6) != 0,
+                        rating = c.getStringOrNull(7),
                     )
                 }
                 out
@@ -549,26 +554,67 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         }
 
     /** Position of [itemId] inside the list for [key], or -1. Used to restore the last channel. */
-    suspend fun indexOf(playlistId: Long, type: ContentType, key: String, itemId: String): Int = withContext(io) {
+    suspend fun indexOf(playlistId: Long, type: ContentType, key: String, itemId: String, sort: Sort = Sort.PROVIDER): Int = withContext(io) {
         val r = db.readableDatabase
-        val sort = r.rawQuery(
-            "SELECT sort FROM entry WHERE playlist_id = ? AND type = ? AND item_id = ?",
+        val (pos, name) = r.rawQuery(
+            "SELECT sort, name FROM entry WHERE playlist_id = ? AND type = ? AND item_id = ?",
             arrayOf(playlistId.toString(), type.ordinal.toString(), itemId),
-        ).use { c -> if (c.moveToFirst()) c.getInt(0) else return@withContext -1 }
+        ).use { c -> if (c.moveToFirst()) c.getInt(0) to c.getString(1) else return@withContext -1 }
         val (where, args) = filter(playlistId, type, key)
         // Not in this list (another category, or a hidden one): no position.
         val inList = r.rawQuery("SELECT 1 FROM entry e $where AND e.item_id = ?", args + itemId).use { it.moveToFirst() }
         if (!inList) return@withContext -1
-        r.rawQuery("SELECT COUNT(*) FROM entry e $where AND e.sort < $sort", args).use { c ->
+        // Rows before it in the list's own order (as in [order]).
+        val group = groupId(key)
+        val (before, extra) = when {
+            group != null -> "(SELECT g.added FROM user_group_item g WHERE g.group_id = $group AND g.item_id = e.item_id) < " +
+                "(SELECT g.added FROM user_group_item g WHERE g.group_id = $group AND g.item_id = ?)" to arrayOf(itemId)
+            key == KEY_FAV || sort == Sort.PROVIDER -> "e.sort < $pos" to emptyArray()
+            sort == Sort.NAME -> "(e.name < ? COLLATE NOCASE OR (e.name = ? COLLATE NOCASE AND e.sort < $pos))" to arrayOf(name, name)
+            sort == Sort.NAME_DESC -> "(e.name > ? COLLATE NOCASE OR (e.name = ? COLLATE NOCASE AND e.sort < $pos))" to arrayOf(name, name)
+            else -> "e.sort < $pos" to emptyArray() // Movies / Series don't restore a position
+        }
+        r.rawQuery("SELECT COUNT(*) FROM entry e $where AND $before", args + extra).use { c ->
             if (c.moveToFirst()) c.getInt(0) else -1
         }
     }
 
     suspend fun details(playlistId: Long, type: ContentType, itemId: String): EntryDetails? = withContext(io) {
         db.readableDatabase.rawQuery(
-            "SELECT rating, plot, ext FROM entry WHERE playlist_id = ? AND type = ? AND item_id = ?",
+            "SELECT rating, plot, ext, added FROM entry WHERE playlist_id = ? AND type = ? AND item_id = ?",
             arrayOf(playlistId.toString(), type.ordinal.toString(), itemId),
-        ).use { c -> if (c.moveToFirst()) EntryDetails(c.getStringOrNull(0), c.getStringOrNull(1), c.getStringOrNull(2)) else null }
+        ).use { c -> if (c.moveToFirst()) EntryDetails(c.getStringOrNull(0), c.getStringOrNull(1), c.getStringOrNull(2), c.getLong(3)) else null }
+    }
+
+    /**
+     * Keeps a rating the movie/series page found (get_vod_info) for a title the list came without
+     * one, so its poster shows it from now on. A reload brings the provider's own value back.
+     */
+    suspend fun saveRating(playlistId: Long, type: ContentType, itemId: String, rating: String) = withContext(io) {
+        db.writableDatabase.execSQL(
+            "UPDATE entry SET rating = ? WHERE playlist_id = ? AND type = ? AND item_id = ? AND (rating IS NULL OR rating = '' OR rating = '0')",
+            arrayOf<Any>(rating, playlistId, type.ordinal, itemId),
+        )
+    }
+
+    // ---- history and reset ----
+
+    /** Clear history: Continue watching of [types] in every playlist. Favourites and groups stay. */
+    suspend fun clearHistory(types: Collection<ContentType>) = withContext(io) {
+        if (types.isEmpty()) return@withContext
+        db.writableDatabase.delete("progress", "type IN (${types.joinToString(",") { it.ordinal.toString() }})", null)
+    }
+
+    /** Reset app: every playlist and everything kept about it, as on a fresh install. */
+    suspend fun resetAll() = withContext(io) {
+        val w = db.writableDatabase
+        w.beginTransaction()
+        try {
+            for (t in RESET_TABLES) w.delete(t, null, null)
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
     }
 
     suspend fun isFavourite(playlistId: Long, type: ContentType, itemId: String): Boolean = withContext(io) {
@@ -748,6 +794,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             Sort.NEWEST -> "e.added DESC, e.sort"
             Sort.RATING -> "CAST(e.rating AS REAL) DESC, e.sort" // no rating counts as 0: last
             Sort.NAME -> "e.name COLLATE NOCASE, e.sort"
+            Sort.NAME_DESC -> "e.name COLLATE NOCASE DESC, e.sort"
             Sort.PROVIDER -> "e.sort"
         }
     }
@@ -797,6 +844,11 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
 
         /** All, Favourites, Continue watching and search lists: not provider categories. */
         fun isBuiltIn(key: String) = key.startsWith("\u0000")
+
+        private val RESET_TABLES = listOf(
+            "entry", "category", "favourite", "progress", "hidden_category", "hidden_item", "shown_category", "shown_item",
+            "user_group_item", "user_group", "playlist",
+        )
 
         const val MIN_RESUME_MS = 30_000L
         const val END_PERCENT = 95

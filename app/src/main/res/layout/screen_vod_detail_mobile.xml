@@ -99,7 +99,12 @@
             <TextView
                 android:id="@+id/favourite"
                 style="@style/ControlButton"
-                android:text="@string/ctl_fav_add" />
+                android:text="@string/vod_fav_add" />
+
+            <TextView
+                android:id="@+id/trailer"
+                style="@style/ControlButton"
+                android:text="@string/trailer" />
 
             <io.github.sardinemehico.iptvplayer.ui.LoadingDots
                 android:id="@+id/busy"
@@ -118,6 +123,23 @@
         android:layout_marginTop="6dp"
         android:maxLines="2"
         android:textSize="14sp" />
+
+    <!-- Cast with photos (Wikipedia); movies here, TV series under the poster instead. -->
+    <HorizontalScrollView
+        android:id="@+id/cast_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:focusable="false"
+        android:scrollbars="none"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/cast_row"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
 
     <!-- Series only. -->
     <HorizontalScrollView

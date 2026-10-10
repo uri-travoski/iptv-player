@@ -197,6 +197,7 @@ class PagedEntryAdapter(
         if (row == null) {
             holder.name.text = ""
             holder.fav?.visibility = View.GONE
+            holder.rating?.visibility = View.GONE
             showLogo(holder, null)
             holder.itemView.isActivated = false
             request(position / PAGE)
@@ -204,6 +205,10 @@ class PagedEntryAdapter(
         }
         holder.name.text = row.name
         holder.fav?.visibility = if (row.favourite) View.VISIBLE else View.GONE
+        holder.rating?.let { r ->
+            val badge = io.github.sardinemehico.iptvplayer.data.source.Ratings.badge(row.rating)
+            if (badge == null) r.visibility = View.GONE else { r.text = "★ $badge"; r.visibility = View.VISIBLE }
+        }
         showLogo(holder, row.logo)
         holder.itemView.isActivated = row.itemId == playingItemId
     }
@@ -286,6 +291,8 @@ class PagedEntryAdapter(
         val logo: ImageView = view.findViewById(R.id.logo)
         val name: TextView = view.findViewById(R.id.name)
         val fav: TextView? = view.findViewById(R.id.fav)
+        /** Posters: the provider's rating, top left (only when there is one). */
+        val rating: TextView? = view.findViewById(R.id.rating)
 
         init {
             view.setOnClickListener {

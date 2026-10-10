@@ -64,7 +64,11 @@ class Syncer(
     private fun xtreamUrls(p: Playlist) = XtreamUrls(XtreamCredentials(p.url, p.username.orEmpty(), p.password.orEmpty()))
 
     suspend fun sync(p: Playlist, progress: (String) -> Unit) {
-        if (p.isXtream) syncXtream(p, progress) else syncM3u(p, progress)
+        when (p.kind) {
+            Playlist.KIND_XTREAM -> syncXtream(p, progress)
+            Playlist.KIND_DEMO -> syncDemo(p)
+            else -> syncM3u(p, progress)
+        }
         // New adult categories/entries are hidden on every load; the admin's own choices stay.
         // Silently: the last progress line stays up while it runs.
         try {
@@ -166,6 +170,17 @@ class Syncer(
             }
         }
         repo.markSynced(p.id, epgUrl)
+    }
+
+    /** The sample playlist: rebuilt from [Demo], nothing downloaded. */
+    private suspend fun syncDemo(p: Playlist) = withContext(io) {
+        val entries = Demo.entries(System.currentTimeMillis() / 1000)
+        for (type in ContentType.values()) {
+            replaceLibrary(p.id, type, Demo.categories().filter { it.type == type }) { insert ->
+                entries.filter { it.type == type }.forEach(insert)
+            }
+        }
+        repo.markSynced(p.id, null)
     }
 
     /** Replaces one library (categories + entries) in a single transaction. */

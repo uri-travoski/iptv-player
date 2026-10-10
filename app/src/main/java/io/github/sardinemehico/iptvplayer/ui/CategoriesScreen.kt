@@ -48,6 +48,15 @@ class CategoriesScreen(
         if (category == null) {
             title.text = activity.getString(R.string.categories_title, playlist.name)
             tabs.forEach { (t, v) -> v.setOnClickListener { show(t) } }
+            // "Live TV (show/hide)", with "(show/hide)" a little smaller.
+            val names = mapOf(ContentType.LIVE to R.string.live_tv, ContentType.MOVIE to R.string.movies, ContentType.SERIES to R.string.series)
+            tabs.forEach { (t, v) ->
+                val name = activity.getString(names.getValue(t))
+                val extra = " " + activity.getString(R.string.show_hide)
+                (v as TextView).text = android.text.SpannableString(name + extra).apply {
+                    setSpan(android.text.style.RelativeSizeSpan(0.72f), name.length, name.length + extra.length, 0)
+                }
+            }
             root.findViewById<View>(R.id.adult_words).setOnClickListener { activity.push(AdultWordsScreen(activity)) }
             root.findViewById<View>(R.id.hide_adult).setOnClickListener { confirmHideAdult() }
         } else {

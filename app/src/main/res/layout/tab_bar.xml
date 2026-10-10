@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Top tab bar on Live TV, Movies and Series: one press to switch library (as in WorldTV2).
+     The current tab is filled (activated); focus shows as usual. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tab_bar"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/background"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="40dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="40dp"
+    android:paddingBottom="6dp">
+
+    <TextView android:id="@+id/tab_home" style="@style/TabItem" android:text="@string/tab_home" />
+    <TextView android:id="@+id/tab_live" style="@style/TabItem" android:text="@string/live_tv" />
+    <TextView android:id="@+id/tab_movies" style="@style/TabItem" android:text="@string/movies" />
+    <TextView android:id="@+id/tab_series" style="@style/TabItem" android:text="@string/series" />
+</LinearLayout>

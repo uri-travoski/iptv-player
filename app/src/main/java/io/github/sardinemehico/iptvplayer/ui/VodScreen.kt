@@ -59,7 +59,7 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
     private val searchBox = SearchBox(searchField, scope, ::onSearch, onSubmit = ::onSearchSubmit)
 
     init {
-        root.findViewById<TextView>(R.id.title).setText(if (type == ContentType.MOVIE) R.string.movies else R.string.series)
+        TabBar.bind(activity, root, if (type == ContentType.MOVIE) TabBar.Tab.MOVIES else TabBar.Tab.SERIES)
         categoriesView.layoutManager = LinearLayoutManager(activity, if (mobile) RecyclerView.HORIZONTAL else RecyclerView.VERTICAL, false)
         categoriesView.adapter = categoryAdapter
         categoriesView.itemAnimator = null
@@ -210,6 +210,7 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
             Sort.NEWEST -> R.string.sort_newest
             Sort.RATING -> R.string.sort_rating
             Sort.NAME -> R.string.sort_name
+            Sort.NAME_DESC -> R.string.sort_name_desc
             Sort.PROVIDER -> R.string.sort_provider
         },
     )

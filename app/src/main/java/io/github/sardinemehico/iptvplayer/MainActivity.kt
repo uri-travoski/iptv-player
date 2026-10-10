@@ -71,6 +71,9 @@ class MainActivity : ComponentActivity() {
         screens = findViewById(R.id.screens)
         App.graph.player.attach(playerView)
         playerView.resizeMode = App.graph.prefs.resizeMode
+        // Settings > Subtitle settings: look (size, colour, background) and automatic choice.
+        io.github.sardinemehico.iptvplayer.player.SubtitleStyle.apply(playerView, App.graph.prefs)
+        App.graph.player.applySubtitlePrefs(App.graph.prefs.subsEnabled, App.graph.prefs.subsLanguage)
         // Draw under the status and navigation bars on every Android version (Android 15+ forces
         // it anyway) and keep the screens clear of them; the video stays full-bleed. TV boxes
         // report no bars, so nothing changes there.
@@ -125,7 +128,7 @@ class MainActivity : ComponentActivity() {
         resetTo(null)
         lifecycleScope.launch {
             route()
-            if (thenSettings) push(PlaylistsScreen(this@MainActivity))
+            if (thenSettings) push(io.github.sardinemehico.iptvplayer.ui.SettingsScreen(this@MainActivity))
         }
     }
 
@@ -265,6 +268,24 @@ class MainActivity : ComponentActivity() {
             p = p.parent
         }
         return false
+    }
+
+    val isMobileLayout get() = App.graph.prefs.isMobile
+
+    /** Before handing over to another app (a trailer): nothing keeps streaming behind it. */
+    fun graphStopPlayback() = App.graph.player.stop()
+
+    /** Top tab bar: back to the home screen, then into [tab]'s library. */
+    fun switchTab(tab: io.github.sardinemehico.iptvplayer.ui.TabBar.Tab) {
+        while (stack.size > 1 && stack.last() !is HomeScreen) pop()
+        when (tab) {
+            io.github.sardinemehico.iptvplayer.ui.TabBar.Tab.HOME -> Unit
+            io.github.sardinemehico.iptvplayer.ui.TabBar.Tab.LIVE -> push(io.github.sardinemehico.iptvplayer.ui.LiveScreen(this))
+            io.github.sardinemehico.iptvplayer.ui.TabBar.Tab.MOVIES ->
+                push(io.github.sardinemehico.iptvplayer.ui.VodScreen(this, io.github.sardinemehico.iptvplayer.data.model.ContentType.MOVIE))
+            io.github.sardinemehico.iptvplayer.ui.TabBar.Tab.SERIES ->
+                push(io.github.sardinemehico.iptvplayer.ui.VodScreen(this, io.github.sardinemehico.iptvplayer.data.model.ContentType.SERIES))
+        }
     }
 
     /** Replaces the whole stack with [screen] (or empties it). */

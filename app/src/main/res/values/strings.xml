@@ -193,4 +193,93 @@
     <string name="ui_mode_setting_mobile">Layout: Mobile (tap to switch to TV)</string>
     <string name="playlists_hint_tv">OK to open · Menu or long-press for refresh and delete</string>
     <string name="playlists_hint_mobile">Tap to open · Long-press for refresh and delete</string>
+
+    <!-- v2.01: Settings tiles -->
+    <string name="set_playlists">Playlists</string>
+    <string name="set_clear_history">Clear history</string>
+    <string name="set_subtitles">Subtitle settings</string>
+    <string name="set_update_now">Update now</string>
+    <string name="set_layout">Layout</string>
+    <string name="set_value_tv">TV (remote)</string>
+    <string name="set_value_mobile">Mobile (touch)</string>
+    <string name="set_auto_start">Auto-start on boot</string>
+    <string name="set_on">On</string>
+    <string name="set_off">Off</string>
+    <string name="set_slots">Home app slots</string>
+    <string name="set_home">Home screen</string>
+    <string name="set_home_is">WorldTV ✓</string>
+    <string name="set_home_make">Not set (OK to set)</string>
+    <string name="set_dns">DNS</string>
+    <string name="set_dns_system">Box default</string>
+    <string name="set_dns_cloudflare">Cloudflare (encrypted)</string>
+    <string name="set_dns_google">Google (encrypted)</string>
+    <string name="set_auto_update">Check for updates on start</string>
+    <string name="set_reset">Reset app</string>
+
+    <string name="tab_home">Home</string>
+    <string name="show_hide">(show/hide)</string>
+    <string name="sort_name_desc">Sort: Z–A</string>
+
+    <string name="live_sort_title">Live channel sort</string>
+    <string name="live_sort_default">Default</string>
+    <string name="live_sort_az">A–Z</string>
+    <string name="live_sort_za">Z–A</string>
+    <string name="live_sort_reset">Reset sorting</string>
+    <string name="live_sort_was_reset">Live channels are back in the provider\'s order</string>
+
+    <string name="auto_refresh_title">Automatic refresh</string>
+    <string name="refresh_every_start">Every start</string>
+    <string name="refresh_daily">Every day</string>
+    <string name="refresh_2_days">Every 2 days</string>
+    <string name="refresh_every_start_long">Update live, movies &amp; series every time WorldTV starts</string>
+    <string name="refresh_daily_long">Update live, movies &amp; series every day</string>
+    <string name="refresh_2_days_long">Update live, movies &amp; series every 2 days (recommended)</string>
+    <string name="auto_refreshing">Updating the playlist automatically…</string>
+    <string name="auto_refresh_done">Playlist updated automatically</string>
+
+    <string name="history_title">Clear history</string>
+    <string name="history_live">Live TV: last channel watched</string>
+    <string name="history_movies">Movies: Continue watching</string>
+    <string name="history_series">Series: Continue watching</string>
+    <string name="history_clear">Clear</string>
+    <string name="history_cleared">History cleared. Favourites and your groups are kept.</string>
+
+    <string name="subs_auto_on">Show subtitles automatically: On</string>
+    <string name="subs_auto_off">Show subtitles automatically: Off</string>
+    <string name="subs_language">Language: %1$s</string>
+    <string name="subs_size">Size: %1$s</string>
+    <string name="subs_color">Colour: %1$s</string>
+    <string name="subs_background">Background: %1$s</string>
+    <string name="subs_online_on">Online subtitles (OpenSubtitles): On</string>
+    <string name="subs_online_off">Online subtitles (OpenSubtitles): not set up</string>
+    <string name="subs_language_title">Subtitle language</string>
+    <string name="subs_size_title">Subtitle size</string>
+    <string name="subs_color_title">Subtitle colour</string>
+    <string name="subs_background_title">Subtitle background</string>
+    <string name="done">Done</string>
+    <string name="subs_online_title">Online subtitles</string>
+    <string name="subs_online_help">Many movies have no subtitles inside. WorldTV can then find them on OpenSubtitles.com, free: make an account there, open Profile › API consumers › New consumer, and type its API key here. Username and password are optional (more downloads per day).</string>
+    <string name="subs_key_hint">API key (required)</string>
+    <string name="subs_user_hint">OpenSubtitles username (optional)</string>
+    <string name="subs_pass_hint">Password (optional)</string>
+    <string name="subs_online_clear">Remove</string>
+    <string name="subs_search_online">Search online…</string>
+    <string name="subs_online_needs_key">Online subtitles come from OpenSubtitles.com and need your own free API key. Add it in Settings › Subtitle settings › Online subtitles (Help explains how).</string>
+    <string name="subs_searching">Searching for subtitles…</string>
+    <string name="subs_none_found">No subtitles found for “%1$s”</string>
+    <string name="subs_results">Subtitles for “%1$s”</string>
+    <string name="subs_added">Subtitles added</string>
+    <string name="subs_failed">Couldn\'t get subtitles</string>
+
+    <string name="trailer">Trailer</string>
+    <string name="vod_fav_add">Favourite</string>
+    <string name="vod_fav_remove">Unfavourite</string>
+    <string name="trailer_no_app">YouTube isn\'t installed on this box</string>
+    <string name="date_added">Added: %1$s</string>
+
+    <string name="reset_title">Reset app?</string>
+    <string name="reset_message">This removes every playlist, your groups and favourites, history, hidden categories, live sorting and all settings, and empties the cache, as if WorldTV were just installed. A sample playlist is then added so you can see how everything looks. This can\'t be undone. The active playlist\'s PIN is asked next.</string>
+    <string name="reset_confirm">Reset</string>
+    <string name="reset_done">WorldTV was reset. A sample playlist was added.</string>
+    <string name="reset_failed">Reset failed: %1$s</string>
 </resources>

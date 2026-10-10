@@ -16,6 +16,7 @@ import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -59,7 +60,8 @@ class PlayerController(context: Context, http: OkHttpClient) {
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(12, TimeUnit.SECONDS)
             .build()
-        val dataSource = OkHttpDataSource.Factory(streamHttp).setUserAgent(Syncer.USER_AGENT)
+        // Streams over OkHttp; local files too (downloaded subtitles), which OkHttp can't open.
+        val dataSource = DefaultDataSource.Factory(context, OkHttpDataSource.Factory(streamHttp).setUserAgent(Syncer.USER_AGENT))
         // Live TS often has key (IDR) frames only every few seconds; starting on any intra frame
         // shows the picture sooner after a zap.
         val extractors = DefaultExtractorsFactory().setTsExtractorFlags(
@@ -176,12 +178,54 @@ class PlayerController(context: Context, http: OkHttpClient) {
     /** The URL actually loaded for [url]: its other format if that is what worked last time. */
     private fun playingUrl(url: String) = preferred[url] ?: url
 
-    private fun load(url: String) {
+    private fun load(url: String, startMs: Long = C.TIME_UNSET) {
         loadedUrl = url
         val item = MediaItem.Builder().setUri(url)
         if (url.contains(".m3u8", ignoreCase = true)) item.setMimeType(MimeTypes.APPLICATION_M3U8)
-        player.setMediaItem(item.build())
+        // A subtitle file downloaded for this stream (Search online) rides along, also on retries.
+        extraSubtitle?.takeIf { it.first == currentUrl }?.let { item.setSubtitleConfigurations(listOf(it.second)) }
+        if (startMs == C.TIME_UNSET) player.setMediaItem(item.build()) else player.setMediaItem(item.build(), startMs)
         player.prepare()
+    }
+
+    /** Subtitle file added to the stream now playing: (stream URL, its configuration). */
+    private var extraSubtitle: Pair<String, MediaItem.SubtitleConfiguration>? = null
+
+    /**
+     * Adds a downloaded subtitle [file] (SubRip) to the movie or episode now playing and shows it.
+     * The stream is loaded again with it at the same position: a second or two of buffering.
+     */
+    fun addSubtitle(file: java.io.File, language: String?) {
+        val url = currentUrl ?: return
+        val config = MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(file))
+            .setMimeType(MimeTypes.APPLICATION_SUBRIP)
+            .setLanguage(language)
+            .setLabel("Online")
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT or C.SELECTION_FLAG_FORCED)
+            .build()
+        extraSubtitle = url to config
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .apply { if (language != null) setPreferredTextLanguage(language) }
+            .build()
+        load(loadedUrl ?: url, player.currentPosition.coerceAtLeast(0))
+    }
+
+    /**
+     * Settings > Subtitle settings: with [enabled], subtitles in [language] (or with no language
+     * set) show by themselves; otherwise only when picked in the player.
+     */
+    fun applySubtitlePrefs(enabled: Boolean, language: String) {
+        val b = player.trackSelectionParameters.buildUpon()
+        if (enabled) {
+            b.setPreferredTextLanguage(language.ifEmpty { java.util.Locale.getDefault().language })
+            b.setSelectUndeterminedTextLanguage(true)
+        } else {
+            b.setPreferredTextLanguages()
+            b.setSelectUndeterminedTextLanguage(false)
+        }
+        player.trackSelectionParameters = b.build()
     }
 
     val playingUrl: String? get() = currentUrl

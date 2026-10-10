@@ -50,11 +50,13 @@ object PlayerUi {
      * Audio (C.TRACK_TYPE_AUDIO) or subtitle (C.TRACK_TYPE_TEXT) picker.
      * [onDone] runs when the picker closes, or straight away if there is nothing to pick.
      */
-    fun chooseTrack(activity: MainActivity, type: Int, onDone: () -> Unit) {
+    fun chooseTrack(activity: MainActivity, type: Int, onSearchOnline: (() -> Unit)? = null, onDone: () -> Unit) {
         val player = App.graph.player
         val tracks = player.tracks(type)
         val isText = type == C.TRACK_TYPE_TEXT
-        if (tracks.isEmpty()) {
+        val online = if (isText) onSearchOnline else null
+        android.util.Log.i("WorldTV.Subs", "menu type=$type tracks=${tracks.size} online=${online != null}")
+        if (tracks.isEmpty() && online == null) {
             activity.toast(activity.getString(R.string.no_tracks))
             onDone()
             return
@@ -62,6 +64,7 @@ object PlayerUi {
         val labels = ArrayList<String>()
         if (isText) labels += activity.getString(R.string.track_off)
         tracks.forEach { labels += it.label }
+        if (online != null) labels += activity.getString(R.string.subs_search_online)
         val offset = if (isText) 1 else 0
         val selected = tracks.indexOfFirst { it.selected }
         val checked = when {
@@ -73,10 +76,15 @@ object PlayerUi {
         AlertDialog.Builder(activity)
             .setTitle(if (isText) R.string.ctl_subs else R.string.ctl_audio)
             .setSingleChoiceItems(labels.toTypedArray(), checked) { d, which ->
+                if (online != null && which == labels.size - 1) {
+                    d.dismiss()
+                    online()
+                    return@setSingleChoiceItems
+                }
                 player.selectTrack(type, if (isText && which == 0) null else tracks[which - offset])
                 d.dismiss()
             }
-            .setOnDismissListener { onDone() }
+            .setOnDismissListener { if (online == null) onDone() }
             .show()
     }
 

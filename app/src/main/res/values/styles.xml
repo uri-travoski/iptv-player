@@ -41,6 +41,30 @@
         <item name="android:stateListAnimator">@null</item>
     </style>
 
+    <!-- Settings tile: icon on the left, name beside it (up to two lines), as in WorldTV2. -->
+    <style name="SettingsTile" parent="TileButton">
+        <item name="android:layout_height">76dp</item>
+        <item name="android:gravity">center_vertical|start</item>
+        <item name="android:drawablePadding">16dp</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:maxLines">3</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:lineSpacingExtra">1dp</item>
+    </style>
+
+    <!-- Top tab bar item (tab_bar.xml): compact; the current tab is filled. -->
+    <style name="TabItem" parent="TileButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:minWidth">72dp</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
     <!-- Full-screen player buttons: flat, compact, focus shown by the tile border. -->
     <style name="ControlButton" parent="TileButton">
         <item name="android:layout_width">wrap_content</item>

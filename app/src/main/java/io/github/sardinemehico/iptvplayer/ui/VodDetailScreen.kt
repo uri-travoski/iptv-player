@@ -18,6 +18,8 @@ import io.github.sardinemehico.iptvplayer.data.repo.Playlist
 import io.github.sardinemehico.iptvplayer.data.repo.Progress
 import io.github.sardinemehico.iptvplayer.data.source.Episode
 import io.github.sardinemehico.iptvplayer.data.source.VodInfo
+import io.github.sardinemehico.iptvplayer.data.online.CastPhotos
+import io.github.sardinemehico.iptvplayer.data.online.SubQuery
 import io.github.sardinemehico.iptvplayer.data.source.XtreamCredentials
 import io.github.sardinemehico.iptvplayer.data.source.XtreamUrls
 import kotlinx.coroutines.CancellationException
@@ -52,6 +54,11 @@ class VodDetailScreen(
     private val seasonsScroll: View = root.findViewById(R.id.seasons_scroll)
     private val seasonsRow: LinearLayout = root.findViewById(R.id.seasons)
     private val episodesView: RecyclerView = root.findViewById(R.id.episodes)
+    private val trailer: TextView = root.findViewById(R.id.trailer)
+    private val castScroll: View = root.findViewById(R.id.cast_scroll)
+    private val castRow: LinearLayout = root.findViewById(R.id.cast_row)
+    /** TV series: cast under the poster (TV layout only). */
+    private val castSide: LinearLayout? = root.findViewById(R.id.cast_side)
 
     private val urls = if (playlist.isXtream) {
         XtreamUrls(XtreamCredentials(playlist.url, playlist.username.orEmpty(), playlist.password.orEmpty()))
@@ -79,6 +86,7 @@ class VodDetailScreen(
         play.setOnClickListener { onPlay(resume = true) }
         fromStart.setOnClickListener { onPlay(resume = false) }
         favourite.setOnClickListener { toggleFavourite() }
+        trailer.setOnClickListener { Trailers.open(activity, info?.trailer, row.name, info?.released) }
         episodesView.layoutManager = LinearLayoutManager(activity)
         episodesView.adapter = episodeAdapter
         episodesView.itemAnimator = null
@@ -147,6 +155,10 @@ class VodDetailScreen(
                 info = graph.syncer.vodInfo(playlist, row.itemId)
             }
             showInfo()
+            // A rating the list came without: keep it, so the poster shows it from now on.
+            val r = info?.rating
+            if (r != null && details?.rating == null) graph.repo.saveRating(playlist.id, type, row.itemId, r)
+            showCast(info?.cast)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -160,15 +172,61 @@ class VodDetailScreen(
     private fun showInfo() {
         val i = info
         val d = details
-        val rating = (i?.rating ?: d?.rating)?.let { "★ $it" }
+        val rating = io.github.sardinemehico.iptvplayer.data.source.Ratings.badge(i?.rating ?: d?.rating)?.let { "★ $it" }
         val year = i?.released?.take(4)?.takeIf { it.all(Char::isDigit) }
         meta.text = listOfNotNull(rating, year, i?.duration, i?.genre).joinToString("   ·   ")
         plot.text = i?.plot ?: d?.plot ?: ""
+        // The cast has its own row of photos (showCast).
         people.text = listOfNotNull(
             i?.director?.let { "Director: $it" },
-            i?.cast?.let { "Cast: $it" },
+            d?.added?.takeIf { it > 0 }?.let { activity.getString(R.string.date_added, Dates.day(it * 1000)) },
         ).joinToString("\n")
         if (row.logo == null && i?.image != null) poster.load(i.image)
+    }
+
+    // ---- cast ----
+
+    /**
+     * The cast as photos with names (photos from Wikipedia, looked up once per page; a name with no
+     * photo shows its initials). Movies: a row under the buttons. TV series: 3 across under the
+     * poster, so the episode list keeps its room.
+     */
+    private fun showCast(cast: String?) {
+        val names = CastPhotos.split(cast, max = if (isEpisodic && castSide != null) 6 else 12)
+        if (names.isEmpty()) return
+        val side = if (isEpisodic) castSide else null
+        val views = names.associateWith { castItem(it, small = side != null) }
+        if (side != null) {
+            side.removeAllViews()
+            names.chunked(3).forEach { chunk ->
+                val r = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+                chunk.forEach { r.addView(views.getValue(it)) }
+                side.addView(r)
+            }
+            side.visibility = View.VISIBLE
+        } else {
+            castRow.removeAllViews()
+            names.forEach { castRow.addView(views.getValue(it)) }
+            castScroll.visibility = View.VISIBLE
+        }
+        scope.launch {
+            val photos = graph.castPhotos.lookup(names)
+            for ((name, url) in photos) {
+                if (url == null) continue
+                val v = views[name] ?: continue
+                v.findViewById<ImageView>(R.id.cast_photo).load(url) {
+                    listener(onSuccess = { _, _ -> v.findViewById<View>(R.id.cast_initials).visibility = View.GONE })
+                }
+            }
+        }
+    }
+
+    private fun castItem(name: String, small: Boolean): View {
+        val v = LayoutInflater.from(activity).inflate(if (small) R.layout.row_cast_small else R.layout.row_cast, castRow, false)
+        v.findViewById<TextView>(R.id.cast_name).text = name
+        v.findViewById<TextView>(R.id.cast_initials).text =
+            name.split(' ').filter { it.isNotEmpty() }.take(2).joinToString("") { it.first().uppercase() }
+        return v
     }
 
     // ---- series ----
@@ -225,6 +283,7 @@ class VodDetailScreen(
                 type = type,
                 itemId = row.itemId,
                 episodeId = it.id,
+                subs = SubQuery.fromName(row.name, info?.released, info?.tmdbId, info?.imdbId, season = it.season.takeIf { s -> s > 0 } ?: 1, episode = it.number),
             )
         }
         val p = progress
@@ -251,7 +310,7 @@ class VodDetailScreen(
         val url = row.streamUrl
             ?: urls?.movie(row.itemId, info?.containerExt ?: details?.ext ?: row.ext ?: "mp4")
             ?: return
-        val item = PlayItem(url, row.name, type, row.itemId)
+        val item = PlayItem(url, row.name, type, row.itemId, subs = SubQuery.fromName(row.name, info?.released, info?.tmdbId, info?.imdbId))
         activity.push(PlayerScreen(activity, listOf(item), 0, if (resume) p?.positionMs ?: 0 else 0))
     }
 
@@ -265,7 +324,7 @@ class VodDetailScreen(
     }
 
     private fun updateFavLabel() {
-        favourite.setText(if (isFav) R.string.ctl_fav_remove else R.string.ctl_fav_add)
+        favourite.setText(if (isFav) R.string.vod_fav_remove else R.string.vod_fav_add)
     }
 
     /** Season's episodes: few enough to hold in memory. */
