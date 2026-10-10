@@ -31,6 +31,7 @@
         <item>24. Other settings</item>
         <item>25. Updates</item>
         <item>26. Troubleshooting</item>
+        <item>27. Diagnostics and privacy</item>
     </string-array>
 
     <string-array name="help_bodies">
@@ -60,5 +61,6 @@
         <item>• Auto-start on boot: opens WorldTV when the box starts (some boxes need "display over other apps" allowed). What happened at the last start shows under the tiles.\n• Home app slots: OK opens a list to choose how many app slots the home screen shows (1 to 14, rows of 5).\n• Home screen: make WorldTV the box\'s Home screen (it opens instead of the box\'s own launcher). All apps and System settings give you the way out.\n• DNS: Box default, or Cloudflare / Google encrypted DNS if your provider\'s server can\'t be found.\n• Dates show as day-month-year, e.g. 10-Oct-2026.</item>
         <item>• Check for updates on start: WorldTV looks for a new version when it starts and offers to install it. Update now looks straight away.\n• The first update may ask to allow "install unknown apps" for WorldTV.</item>
         <item>• Channel doesn\'t play: try another channel. Event channels (sports, PPV) only play during the event. Try Open in… with another player.\n• "This stream is not available": the provider\'s server isn\'t sending it, or your account is in use on another device (most accounts allow 1 connection at a time).\n• Buffering: the provider\'s server is slow or far away; try another server/playlist, or the DNS setting.\n• Nothing loads / sign-in fails: check the server address, username and password, and the expiry date on the home screen.\n• A playlist takes long to load: big catalogues (hundreds of thousands of titles) are slow on small boxes; let it finish.\n• No subtitles: the video has none built in; use Search online… in the player (section 12).\n• No cast photos: Wikipedia has no photo under that name, or the box is offline; names still show.\n• Something is hidden that shouldn\'t be (or the other way round): Settings > Categories (show / hide), or Adult words.</item>
+        <item>• On first start you accept the Terms of Use, the Privacy Policy and diagnostics with one tick.\n• What is sent: device details (model, Android version, memory, storage, screen, GPU), app version, your app settings, playlist details (address, username and password), what is played and when, playback errors, and crash reports. Only to fix problems on your devices.\n• Where: a private database only the app owner can read.\n• Turn it off any time: Settings &gt; Send diagnostics. When it is off, nothing is collected or sent.\n• It is submitted in the background in small batches and never slows the app down.</item>
     </string-array>
 </resources>

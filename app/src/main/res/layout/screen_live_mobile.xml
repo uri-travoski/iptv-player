@@ -44,7 +44,7 @@
             android:paddingEnd="16dp"
             android:textSize="14sp" />
 
-        <io.github.sardinemehico.iptvplayer.ui.SearchField
+        <com.worldtv.iptvplayer.ui.SearchField
             android:id="@+id/search"
             style="@style/SearchInput"
             android:layout_marginStart="12dp"

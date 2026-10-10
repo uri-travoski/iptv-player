@@ -1,0 +1,226 @@
+package com.worldtv.iptvplayer.ui
+
+import android.view.KeyEvent
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.worldtv.iptvplayer.MainActivity
+import com.worldtv.iptvplayer.R
+import com.worldtv.iptvplayer.data.model.ContentType
+import com.worldtv.iptvplayer.data.repo.CategoryRow
+import com.worldtv.iptvplayer.data.repo.Playlist
+import kotlinx.coroutines.launch
+
+/**
+ * Admin: what a playlist shows. With no [category], its categories per library (Live TV, Movies,
+ * Series): OK hides or shows one, Menu or long-press opens it to hide single entries. With a
+ * [category], that category's entries. Reached from App Settings behind the playlist's PIN, so
+ * viewers can't undo it. Hidden items are left out of every list (see Repository.filter).
+ */
+class CategoriesScreen(
+    activity: MainActivity,
+    private val playlist: Playlist,
+    private val category: CategoryRow? = null,
+    private var type: ContentType = ContentType.LIVE,
+) : Screen(activity) {
+
+    /** One row: a category or an entry, hidden or not, and a note (hidden entries inside). */
+    private class Row(val id: String, val name: String, var hidden: Boolean, val note: String = "", val cat: CategoryRow? = null)
+
+    override val root: View = inflater.inflate(R.layout.screen_categories, null)
+    private val tabs = mapOf(
+        ContentType.LIVE to root.findViewById<View>(R.id.tab_live),
+        ContentType.MOVIE to root.findViewById<View>(R.id.tab_movies),
+        ContentType.SERIES to root.findViewById<View>(R.id.tab_series),
+    )
+    private val summary: TextView = root.findViewById(R.id.summary)
+    private val list: RecyclerView = root.findViewById(R.id.list)
+    private val adapter = Rows()
+    private var loadedOnce = false
+
+    init {
+        fullWidthOnMobile(R.id.form)
+        val title = root.findViewById<TextView>(R.id.title)
+        if (category == null) {
+            title.text = activity.getString(R.string.categories_title, playlist.name)
+            tabs.forEach { (t, v) -> v.setOnClickListener { show(t) } }
+            // "Live TV (show/hide)", with "(show/hide)" a little smaller.
+            val names = mapOf(ContentType.LIVE to R.string.live_tv, ContentType.MOVIE to R.string.movies, ContentType.SERIES to R.string.series)
+            tabs.forEach { (t, v) ->
+                val name = activity.getString(names.getValue(t))
+                val extra = " " + activity.getString(R.string.show_hide)
+                (v as TextView).text = android.text.SpannableString(name + extra).apply {
+                    setSpan(android.text.style.RelativeSizeSpan(0.72f), name.length, name.length + extra.length, 0)
+                }
+            }
+            root.findViewById<View>(R.id.adult_words).setOnClickListener { activity.push(AdultWordsScreen(activity)) }
+            root.findViewById<View>(R.id.hide_adult).setOnClickListener { confirmHideAdult() }
+        } else {
+            title.text = category.name
+            (tabs.getValue(ContentType.LIVE).parent as View).visibility = View.GONE
+            root.findViewById<View>(R.id.adult_words).visibility = View.GONE
+            root.findViewById<View>(R.id.hide_adult).visibility = View.GONE
+            root.findViewById<View>(R.id.adult_note).visibility = View.GONE
+            root.findViewById<TextView>(R.id.hint).setText(R.string.entries_hint)
+        }
+        root.findViewById<View>(R.id.show_all).setOnClickListener { showAll() }
+        list.layoutManager = LinearLayoutManager(activity)
+        list.adapter = adapter
+        list.itemAnimator = null
+    }
+
+    override fun onShown() {
+        activity.hideVideo()
+        graph.player.stop()
+        // Also after coming back from a category: its hidden count may have changed. Focus returns to it.
+        show(type, focusAt = openedAt)
+        openedAt = -1
+    }
+
+    private fun show(t: ContentType, focusAt: Int = -1) {
+        type = t
+        tabs.forEach { (k, v) -> v.isActivated = k == t }
+        scope.launch {
+            adapter.rows = if (category == null) {
+                graph.repo.categoriesForAdmin(playlist.id, t).map {
+                    val note = if (it.hiddenEntries > 0) "   " + activity.getString(R.string.categories_hidden_entries, it.hiddenEntries) else ""
+                    Row(it.row.key, it.row.name, it.hidden, note, it.row)
+                }
+            } else {
+                graph.repo.entriesForAdmin(playlist.id, t, category.key).map { Row(it.itemId, it.name, it.hidden) }
+            }
+            updateSummary()
+            if (focusAt >= 0) focusRow(focusAt)
+            if (!loadedOnce) {
+                loadedOnce = true
+                if (category == null) tabs.getValue(t).requestFocus() else list.post { list.getChildAt(0)?.requestFocus() }
+            }
+        }
+    }
+
+    /** Focus row [position] once the rebuilt list has laid it out (a frame or two on a slow box). */
+    private fun focusRow(position: Int) {
+        list.scrollToPosition(position)
+        var tries = 0
+        fun attempt() {
+            val row = list.findViewHolderForAdapterPosition(position)?.itemView
+            if (row != null) row.requestFocus() else if (++tries < 8) list.post { attempt() }
+        }
+        list.post { attempt() }
+    }
+
+    private suspend fun save(ids: List<String>, hidden: Boolean) {
+        if (category == null) graph.repo.setHidden(playlist.id, type, ids, hidden)
+        else graph.repo.setEntriesHidden(playlist.id, type, ids, hidden)
+    }
+
+    private fun toggle(position: Int) {
+        val row = adapter.rows.getOrNull(position) ?: return
+        scope.launch {
+            save(listOf(row.id), !row.hidden)
+            if (category == null && row.hidden) {
+                show(type, focusAt = position) // shown whole: refresh the "(N hidden)" notes, focus stays put
+                return@launch
+            }
+            row.hidden = !row.hidden
+            adapter.notifyItemChanged(position)
+            updateSummary()
+        }
+    }
+
+    /** Row whose entries were opened: focus goes back to it on return. */
+    private var openedAt = -1
+
+    private fun open(position: Int) {
+        val cat = adapter.rows.getOrNull(position)?.cat ?: return
+        openedAt = position
+        activity.push(CategoriesScreen(activity, playlist, cat, type))
+    }
+
+    /**
+     * Show all: back to the defaults (own choices cleared), so adult ones stay hidden: marking
+     * everything "shown by hand" would switch adult hiding off.
+     */
+    private fun showAll() {
+        scope.launch {
+            graph.repo.resetToDefault(playlist.id, type, adapter.rows.map { it.id }, entries = category != null)
+            // Adult ones are hidden again by a background re-check; the list updates when it ends.
+            val tab = type
+            graph.rescanAdult(listOf(playlist.id)) { if (type == tab) show(type) }
+            show(type)
+        }
+    }
+
+    /** Hide adult: asks first, as it undoes the admin's own "shown" choices for adult content. */
+    private fun confirmHideAdult() {
+        android.app.AlertDialog.Builder(activity)
+            .setTitle(activity.getString(R.string.categories_hide_adult_q, playlist.name))
+            .setMessage(R.string.categories_hide_adult_msg)
+            .setPositiveButton(R.string.categories_hide_adult) { _, _ -> hideAdult() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun hideAdult() {
+        // In the activity's scope: it finishes even if the admin leaves this screen meanwhile.
+        val tab = type
+        activity.lifecycleScope.launch {
+            try {
+                graph.repo.hideAllAdult(playlist.id, graph.adultNames())
+                activity.toast(activity.getString(R.string.categories_hide_adult_done))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("WorldTV.Adult", "hide adult failed", e)
+            }
+            if (type == tab) show(type) // does nothing once this screen is gone (its scope is cancelled)
+        }
+    }
+
+    private fun updateSummary() {
+        val rows = adapter.rows
+        summary.text = activity.getString(R.string.categories_summary, rows.count { !it.hidden }, rows.size)
+    }
+
+    private inner class Rows : RecyclerView.Adapter<Rows.VH>() {
+        var rows: List<Row> = emptyList()
+            set(value) {
+                field = value
+                notifyDataSetChanged()
+            }
+
+        override fun getItemCount() = rows.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+            VH(LayoutInflater.from(parent.context).inflate(R.layout.row_admin, parent, false) as TextView)
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val row = rows[position]
+            holder.text.text = (if (row.hidden) "✕   " else "✓   ") + row.name + row.note
+            holder.text.setTextColor(activity.getColor(if (row.hidden) R.color.text_secondary else R.color.text_primary))
+        }
+
+        inner class VH(val text: TextView) : RecyclerView.ViewHolder(text) {
+            private fun pos() = bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }
+
+            init {
+                text.setOnClickListener { pos()?.let(::toggle) }
+                if (category == null) {
+                    text.setOnLongClickListener { pos()?.let(::open); true }
+                    text.setOnKeyListener { _, keyCode, event ->
+                        if (keyCode == KeyEvent.KEYCODE_MENU && event.action == KeyEvent.ACTION_DOWN) {
+                            pos()?.let(::open)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

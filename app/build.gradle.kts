@@ -6,15 +6,15 @@ plugins {
 }
 
 android {
-    namespace = "io.github.sardinemehico.iptvplayer"
+    namespace = "com.worldtv.iptvplayer"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "io.github.sardinemehico.iptvplayer"
+        applicationId = "com.worldtv.iptvplayer"
         minSdk = 24
         targetSdk = 36
-        versionCode = 36
-        versionName = "2.03"
+        versionCode = 38
+        versionName = "2.21"
         // English only for now; keeps unused library translations out of the APK.
         resourceConfigurations += listOf("en")
         // TV boxes are ARM. Keeps the FFmpeg audio decoder to two ~1.4 MB native libraries.

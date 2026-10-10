@@ -34,7 +34,7 @@ The APK lands in `app/build/outputs/apk/release/`. CI fails the build if it reac
 ## Layout
 
 ```
-app/src/main/java/io/github/sardinemehico/iptvplayer/
+app/src/main/java/com/worldtv/iptvplayer/
   MainActivity.kt            single activity, plain Views
   data/model/Content.kt      ContentType, Category, Entry
   data/source/M3uParser.kt   streaming M3U/M3U8 parser

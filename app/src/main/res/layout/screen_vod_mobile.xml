@@ -7,7 +7,7 @@
 
     <include layout="@layout/tab_bar" />
 
-    <io.github.sardinemehico.iptvplayer.ui.SearchField
+    <com.worldtv.iptvplayer.ui.SearchField
         android:id="@+id/search"
         style="@style/SearchInput"
         android:layout_marginStart="12dp"

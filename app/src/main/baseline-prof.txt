@@ -3,8 +3,8 @@
 # Wildcard rules (packaged by AGP; installed on sideloaded boxes by androidx.profileinstaller).
 
 # WorldTV itself.
-HSPLio/github/sardinemehico/iptvplayer/**->**(**)**
-Lio/github/sardinemehico/iptvplayer/**;
+HSPLcom/worldtv/iptvplayer/**->**(**)**
+Lcom/worldtv/iptvplayer/**;
 
 # Lists and focus (every screen, every scroll).
 HSPLandroidx/recyclerview/widget/**->**(**)**

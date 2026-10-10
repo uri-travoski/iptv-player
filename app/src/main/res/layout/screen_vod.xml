@@ -23,7 +23,7 @@
         android:paddingTop="12dp"
         android:paddingEnd="12dp">
 
-        <io.github.sardinemehico.iptvplayer.ui.SearchField
+        <com.worldtv.iptvplayer.ui.SearchField
             android:id="@+id/search"
             style="@style/SearchInput" />
 

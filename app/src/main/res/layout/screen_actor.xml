@@ -63,7 +63,7 @@
                 android:maxLines="3"
                 android:textSize="15sp" />
 
-            <io.github.sardinemehico.iptvplayer.ui.LoadingDots
+            <com.worldtv.iptvplayer.ui.LoadingDots
                 android:id="@+id/busy"
                 android:layout_width="40dp"
                 android:layout_height="10dp"
