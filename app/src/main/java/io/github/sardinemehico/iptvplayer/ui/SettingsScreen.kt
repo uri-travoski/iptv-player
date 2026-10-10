@@ -23,6 +23,8 @@ import io.github.sardinemehico.iptvplayer.data.net.AppDns
 import io.github.sardinemehico.iptvplayer.data.repo.Playlist
 import io.github.sardinemehico.iptvplayer.data.repo.Sort
 import io.github.sardinemehico.iptvplayer.data.sync.Demo
+import io.github.sardinemehico.iptvplayer.data.online.OnlineAccount
+import io.github.sardinemehico.iptvplayer.data.online.OnlineService
 import io.github.sardinemehico.iptvplayer.player.SubtitleStyle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -93,22 +95,14 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         tiles += Tile("auto_refresh", R.drawable.ic_s_autorenew, { s(R.string.auto_refresh_title) }, { autoRefreshLabel(prefs.autoRefresh) }) { chooseAutoRefresh() }
         tiles += Tile("history", R.drawable.ic_s_history, { s(R.string.set_clear_history) }) { clearHistory() }
         tiles += Tile("subtitles", R.drawable.ic_s_subtitles, { s(R.string.set_subtitles) }) { subtitleSettings() }
+        tiles += Tile("online", R.drawable.ic_s_key, { s(R.string.set_online) }, { onlineSummary() }) { onlineAccounts() }
         tiles += Tile("layout", R.drawable.ic_s_layout, { s(R.string.set_layout) }, { s(if (mobile) R.string.set_value_mobile else R.string.set_value_tv) }) {
             prefs.uiMode = if (mobile) Prefs.UI_TV else Prefs.UI_MOBILE
             activity.restartUi(thenSettings = true)
         }
         if (!mobile) {
             tiles += Tile("auto_start", R.drawable.ic_s_power, { s(R.string.set_auto_start) }, { s(if (prefs.autoStart) R.string.set_on else R.string.set_off) }) { toggleAutoStart() }
-            tiles += Tile(
-                "slots", R.drawable.ic_s_apps, { s(R.string.set_slots) }, { "‹ ${prefs.appSlotCount} ›" },
-                onKey = { key ->
-                    when (key) {
-                        KeyEvent.KEYCODE_DPAD_LEFT -> { changeSlots(-1, wrap = false); true }
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> { changeSlots(+1, wrap = false); true }
-                        else -> false
-                    }
-                },
-            ) { changeSlots(+1, wrap = true) }
+            tiles += Tile("slots", R.drawable.ic_s_apps, { s(R.string.set_slots) }, { prefs.appSlotCount.toString() }) { chooseSlots() }
             tiles += Tile("home", R.drawable.ic_s_home, { s(R.string.set_home) }, { s(if (Apps.isDefaultHome(activity)) R.string.set_home_is else R.string.set_home_make) }) {
                 if (Apps.isDefaultHome(activity)) Apps.changeDefaultHome(activity) else Apps.requestDefaultHome(activity) { refresh() }
             }
@@ -187,12 +181,19 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         else -> R.string.set_dns_system
     }
 
-    private fun changeSlots(delta: Int, wrap: Boolean) {
-        var n = prefs.appSlotCount + delta
-        if (n > Prefs.MAX_SLOTS) n = if (wrap) Prefs.MIN_SLOTS else Prefs.MAX_SLOTS
-        if (n < Prefs.MIN_SLOTS) n = Prefs.MIN_SLOTS
-        prefs.appSlotCount = n
-        refresh()
+    /** How many app slots the home screen shows: a list to pick from (1 to 14, rows of 5). */
+    private fun chooseSlots() {
+        val counts = (Prefs.MIN_SLOTS..Prefs.MAX_SLOTS).toList()
+        val labels = counts.map { activity.resources.getQuantityString(R.plurals.slots_n, it, it) }.toTypedArray()
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.set_slots)
+            .setSingleChoiceItems(labels, counts.indexOf(prefs.appSlotCount)) { d, which ->
+                prefs.appSlotCount = counts[which]
+                refresh()
+                d.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun canLaunchAtBoot() = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(activity)
@@ -342,7 +343,7 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
                     2 -> pick(R.string.subs_size_title, SubtitleStyle.SIZE_LABELS, p.subsSize) { p.subsSize = it }
                     3 -> pick(R.string.subs_color_title, SubtitleStyle.COLOR_LABELS, p.subsColor) { p.subsColor = it }
                     4 -> pick(R.string.subs_background_title, SubtitleStyle.BACKGROUND_LABELS, p.subsBackground) { p.subsBackground = it }
-                    5 -> openSubtitlesAccount()
+                    5 -> accountList(OnlineService.OPENSUBTITLES) { subtitleSettings() }
                 }
             }
             .setNegativeButton(R.string.done, null)
@@ -368,20 +369,97 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         graph.player.applySubtitlePrefs(prefs.subsEnabled, prefs.subsLanguage)
     }
 
-    /** OpenSubtitles API key (needed) and account (optional) for "Search online" in the player. */
-    private fun openSubtitlesAccount() {
+    // ---- Online accounts ----
+
+    private fun onlineSummary(): String = OnlineService.values().joinToString(" · ") { "${it.title} ${prefs.accounts(it).size}" }
+
+    /** The services that use the user's own accounts, each with its list. */
+    private fun onlineAccounts() {
+        val services = OnlineService.values()
+        val labels = services.map { svc ->
+            val n = prefs.accounts(svc).size
+            activity.getString(if (svc == OnlineService.TMDB) R.string.online_tmdb else R.string.online_opensubs, n)
+        }.toTypedArray()
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.set_online)
+            .setItems(labels) { _, which -> accountList(services[which]) { onlineAccounts() } }
+            .setNegativeButton(R.string.done) { _, _ -> refresh() }
+            .show()
+    }
+
+    /**
+     * One service's accounts, in the order they are tried (the one that worked last is tried
+     * first next time). OK on an account: Test, Edit, Move to top, Remove. Last row: Add account.
+     */
+    private fun accountList(service: OnlineService, back: () -> Unit) {
+        val list = prefs.accounts(service)
+        val status = rotation(service).status
+        val labels = list.mapIndexed { i, a ->
+            val st = status[a.key]?.let { if (it == "OK") "  ✓ works" else "  ✕ $it" }.orEmpty()
+            "${i + 1}. ${a.label}$st"
+        } + activity.getString(R.string.online_add)
+        AlertDialog.Builder(activity)
+            .setTitle(activity.getString(R.string.online_list_title, service.title))
+            .setItems(labels.toTypedArray()) { _, which ->
+                if (which == list.size) editAccount(service, null) { accountList(service, back) } else accountActions(service, which) { accountList(service, back) }
+            }
+            .setNegativeButton(R.string.done) { _, _ -> refresh(); back() }
+            .show()
+    }
+
+    private fun rotation(service: OnlineService) = if (service == OnlineService.TMDB) graph.tmdb.rotation else graph.openSubs.rotation
+
+    private fun accountActions(service: OnlineService, index: Int, back: () -> Unit) {
+        val list = prefs.accounts(service).toMutableList()
+        val account = list.getOrNull(index) ?: return back()
+        val actions = arrayOf(
+            activity.getString(R.string.online_test),
+            activity.getString(R.string.online_edit),
+            activity.getString(R.string.online_move_top),
+            activity.getString(R.string.online_remove),
+        )
+        AlertDialog.Builder(activity)
+            .setTitle(account.label)
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> testAccount(service, account, back)
+                    1 -> editAccount(service, index, back)
+                    2 -> { list.removeAt(index); list.add(0, account); prefs.setAccounts(service, list); back() }
+                    3 -> { list.removeAt(index); prefs.setAccounts(service, list); activity.toast(activity.getString(R.string.online_removed)); back() }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> back() }
+            .show()
+    }
+
+    private fun testAccount(service: OnlineService, account: OnlineAccount, back: () -> Unit) {
+        activity.toast(activity.getString(R.string.online_testing))
+        scope.launch {
+            val result = if (service == OnlineService.TMDB) graph.tmdb.test(account) else graph.openSubs.test(account)
+            AlertDialog.Builder(activity)
+                .setTitle("${service.title} · ${account.label}")
+                .setMessage(result)
+                .setPositiveButton(android.R.string.ok) { _, _ -> back() }
+                .setOnCancelListener { back() }
+                .show()
+        }
+    }
+
+    /** Add (index null) or edit an account; saved accounts are tested straight away. */
+    private fun editAccount(service: OnlineService, index: Int?, back: () -> Unit) {
         val d = activity.resources.displayMetrics.density
+        val old = index?.let { prefs.accounts(service).getOrNull(it) }
         fun field(hint: Int, value: String, password: Boolean = false) = EditText(activity).apply {
             setHint(hint)
             setText(value)
             setSingleLine()
             inputType = if (password) InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         }
-        val key = field(R.string.subs_key_hint, prefs.openSubsKey)
-        val user = field(R.string.subs_user_hint, prefs.openSubsUser)
-        val pass = field(R.string.subs_pass_hint, prefs.openSubsPassword, password = true)
+        val key = field(R.string.online_key_hint, old?.key.orEmpty())
+        val user = field(R.string.subs_user_hint, old?.user.orEmpty())
+        val pass = field(R.string.subs_pass_hint, old?.password.orEmpty(), password = true)
         val help = TextView(activity).apply {
-            setText(R.string.subs_online_help)
+            setText(if (service == OnlineService.TMDB) R.string.online_tmdb_help else R.string.subs_online_help)
             setTextColor(activity.getColor(R.color.text_secondary))
             textSize = 14f
         }
@@ -391,25 +469,21 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
             setPadding(pad, (8 * d).toInt(), pad, 0)
             addView(help)
             addView(key)
-            addView(user)
-            addView(pass)
+            if (service.hasLogin) { addView(user); addView(pass) }
         }
         AlertDialog.Builder(activity)
-            .setTitle(R.string.subs_online_title)
+            .setTitle(activity.getString(if (old == null) R.string.online_add_title else R.string.online_edit_title, service.title))
             .setView(box)
             .setPositiveButton(R.string.group_save) { _, _ ->
-                prefs.openSubsKey = key.text.toString()
-                prefs.openSubsUser = user.text.toString()
-                prefs.openSubsPassword = pass.text.toString()
-                subtitleSettings()
+                val k = key.text.toString().trim()
+                if (k.isEmpty()) return@setPositiveButton back()
+                val account = OnlineAccount(k, if (service.hasLogin) user.text.toString().trim() else "", if (service.hasLogin) pass.text.toString() else "")
+                val list = prefs.accounts(service).toMutableList()
+                if (index != null && index in list.indices) list[index] = account else list += account
+                prefs.setAccounts(service, list)
+                testAccount(service, account, back)
             }
-            .setNeutralButton(R.string.subs_online_clear) { _, _ ->
-                prefs.openSubsKey = ""
-                prefs.openSubsUser = ""
-                prefs.openSubsPassword = ""
-                subtitleSettings()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> subtitleSettings() }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> back() }
             .show()
     }
 

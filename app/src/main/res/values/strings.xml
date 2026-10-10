@@ -250,7 +250,7 @@
     <string name="subs_size">Size: %1$s</string>
     <string name="subs_color">Colour: %1$s</string>
     <string name="subs_background">Background: %1$s</string>
-    <string name="subs_online_on">Online subtitles (OpenSubtitles): On</string>
+    <string name="subs_online_on">Online subtitles (OpenSubtitles accounts)</string>
     <string name="subs_online_off">Online subtitles (OpenSubtitles): not set up</string>
     <string name="subs_language_title">Subtitle language</string>
     <string name="subs_size_title">Subtitle size</string>
@@ -258,13 +258,13 @@
     <string name="subs_background_title">Subtitle background</string>
     <string name="done">Done</string>
     <string name="subs_online_title">Online subtitles</string>
-    <string name="subs_online_help">Many movies have no subtitles inside. WorldTV can then find them on OpenSubtitles.com, free: make an account there, open Profile › API consumers › New consumer, and type its API key here. Username and password are optional (more downloads per day).</string>
+    <string name="subs_online_help">Many movies have no subtitles inside. WorldTV can then find them on OpenSubtitles.com, free: make an account there, open Profile › API consumers › New consumer, and type its API key here. Username and password are optional (more downloads per day). Add several accounts: when one is refused or out of downloads, the next is used.</string>
     <string name="subs_key_hint">API key (required)</string>
     <string name="subs_user_hint">OpenSubtitles username (optional)</string>
     <string name="subs_pass_hint">Password (optional)</string>
     <string name="subs_online_clear">Remove</string>
     <string name="subs_search_online">Search online…</string>
-    <string name="subs_online_needs_key">Online subtitles come from OpenSubtitles.com and need your own free API key. Add it in Settings › Subtitle settings › Online subtitles (Help explains how).</string>
+    <string name="subs_online_needs_key">Online subtitles come from OpenSubtitles.com and need your own free API key. Add it in Settings › Online accounts › OpenSubtitles (Help explains how).</string>
     <string name="subs_searching">Searching for subtitles…</string>
     <string name="subs_none_found">No subtitles found for “%1$s”</string>
     <string name="subs_results">Subtitles for “%1$s”</string>
@@ -282,4 +282,25 @@
     <string name="reset_confirm">Reset</string>
     <string name="reset_done">WorldTV was reset. A sample playlist was added.</string>
     <string name="reset_failed">Reset failed: %1$s</string>
+
+    <!-- Online accounts (TMDB, OpenSubtitles): several each, tried in turn -->
+    <string name="set_online">Online accounts</string>
+    <string name="online_tmdb">TMDB (cast photos, ratings, trailers): %1$d</string>
+    <string name="online_opensubs">OpenSubtitles (subtitles): %1$d</string>
+    <string name="online_list_title">%1$s accounts (tried in this order)</string>
+    <string name="online_add">＋ Add account</string>
+    <string name="online_add_title">Add %1$s account</string>
+    <string name="online_edit_title">Edit %1$s account</string>
+    <string name="online_test">Test</string>
+    <string name="online_edit">Edit</string>
+    <string name="online_move_top">Move to the top</string>
+    <string name="online_remove">Remove</string>
+    <string name="online_removed">Account removed</string>
+    <string name="online_testing">Testing…</string>
+    <string name="online_key_hint">API key</string>
+    <string name="online_tmdb_help">TMDB gives cast photos, ratings and trailers. Get a free key: themoviedb.org › Settings › API › request a key (personal use), then type the API key (or the API read access token) here. Add several: if one stops working, the next is used.</string>
+    <plurals name="slots_n">
+        <item quantity="one">%1$d app slot</item>
+        <item quantity="other">%1$d app slots</item>
+    </plurals>
 </resources>

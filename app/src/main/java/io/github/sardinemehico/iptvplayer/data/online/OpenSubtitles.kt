@@ -10,7 +10,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
-import java.io.IOException
 
 /** What to look subtitles up by: the panel's ids when it has them, else the cleaned-up title. */
 data class SubQuery(
@@ -31,7 +30,7 @@ data class SubQuery(
         fun fromName(name: String, year: String? = null, tmdbId: String? = null, imdbId: String? = null, season: Int? = null, episode: Int? = null): SubQuery {
             var t = name.replace(PREFIX, "")
             val y = year?.take(4)?.takeIf { it.length == 4 && it.all(Char::isDigit) } ?: YEAR.find(t)?.groupValues?.get(1)
-            t = t.replace(YEAR, " ").replace(TAGS, " ").replace(Regex("[\\[\\](){}|_]+"), " ").replace(Regex("\\s+"), " ").trim(' ', '-', ':', '.')
+            t = t.replace(YEAR, " ").replace(TAGS, " ").replace(Regex("[\\[\\](){}|_\"]+"), " ").replace(Regex("\\s+"), " ").trim(' ', '-', ':', '.')
             return SubQuery(t, y, tmdbId, imdbId, season, episode)
         }
     }
@@ -40,23 +39,24 @@ data class SubQuery(
 data class SubResult(val fileId: Long, val language: String, val release: String, val downloads: Int, val hearingImpaired: Boolean)
 
 /**
- * OpenSubtitles.com REST API (https://opensubtitles.stoplight.io). Needs the user's own free API
- * key (Settings > Subtitle settings); a free account login is optional and allows more downloads
- * per day. Nothing is sent anywhere unless the user searches from the player.
+ * OpenSubtitles.com REST API (https://opensubtitles.stoplight.io), with the user's own accounts
+ * (Settings > Online accounts): an API key each, optionally with a login for a higher daily
+ * download allowance. When an account is refused or out of downloads, the next one is used.
+ * Nothing is sent anywhere unless the user searches from the player (or tests an account).
  */
 class OpenSubtitles(private val http: OkHttpClient, private val io: CoroutineDispatcher, private val prefs: Prefs, private val cacheDir: File, private val agent: String) {
 
-    class Failure(message: String) : IOException(message)
+    val rotation = AccountRotation(OnlineService.OPENSUBTITLES) { prefs.accounts(OnlineService.OPENSUBTITLES) }
 
-    private var token: String? = null
-    private var tokenFor: String? = null
-    private var host = "api.opensubtitles.com"
+    val isSetUp get() = rotation.isSetUp
 
-    val isSetUp get() = prefs.openSubsKey.isNotEmpty()
+    /** Login per account (key + user): token and the API host it was given. */
+    private class Session(val token: String?, val host: String)
+
+    private val sessions = HashMap<OnlineAccount, Session>()
 
     /** Subtitles for [q] in [languages] (ISO 639-1, comma separated), most downloaded first. */
     suspend fun search(q: SubQuery, languages: String): List<SubResult> = withContext(io) {
-        login()
         val params = sortedMapOf<String, String>()
         params["languages"] = languages.lowercase()
         params["order_by"] = "download_count"
@@ -73,10 +73,74 @@ class OpenSubtitles(private val http: OkHttpClient, private val io: CoroutineDis
                 if (!episode && q.year != null) params["year"] = q.year
             }
         }
-        // The API wants parameters in alphabetical order and lower case (else it redirects).
-        val url = "https://$host/api/v1/subtitles".toHttpUrl().newBuilder().apply { params.forEach { (k, v) -> addQueryParameter(k, v) } }.build()
-        val json = call(Request.Builder().url(url).get())
-        val data = json.optJSONArray("data") ?: return@withContext emptyList()
+        rotation.run { account ->
+            val s = session(account)
+            // The API wants parameters in alphabetical order and lower case (else it redirects).
+            val url = "https://${s.host}/api/v1/subtitles".toHttpUrl().newBuilder().apply { params.forEach { (k, v) -> addQueryParameter(k, v) } }.build()
+            parseResults(call(account, s, Request.Builder().url(url).get()))
+        }
+    }
+
+    /** Downloads one subtitle as SubRip into the app's cache; returns the file. */
+    suspend fun download(r: SubResult): File = withContext(io) {
+        val link = rotation.run { account ->
+            val s = session(account)
+            val body = JSONObject().put("file_id", r.fileId).put("sub_format", "srt").toString()
+            val json = call(account, s, Request.Builder().url("https://${s.host}/api/v1/download").post(body.toRequestBody(JSON)))
+            json.optString("link").ifEmpty { throw OnlineFailure(json.optString("message").ifEmpty { "no download link" }, tryNext = true) }
+        }
+        val dir = File(cacheDir, "subtitles").apply { mkdirs() }
+        // Keep only a few: they are small, but the cache is shared with posters.
+        dir.listFiles()?.sortedBy { it.lastModified() }?.dropLast(10)?.forEach { it.delete() }
+        val file = File(dir, "${r.fileId}.srt")
+        http.newCall(Request.Builder().url(link).header("User-Agent", agent).build()).execute().use { res ->
+            if (!res.isSuccessful) throw OnlineFailure("Download failed (HTTP ${res.code})", tryNext = false)
+            file.outputStream().use { out -> res.body!!.byteStream().copyTo(out) }
+        }
+        file
+    }
+
+    /** Settings > Online accounts > Test: whether [account] works, and its downloads left today when known. */
+    suspend fun test(account: OnlineAccount): String = withContext(io) {
+        sessions.remove(account)
+        try {
+            val s = session(account)
+            val text = if (s.token != null) {
+                val info = call(account, s, Request.Builder().url("https://${s.host}/api/v1/infos/user").get()).optJSONObject("data")
+                val left = info?.optInt("remaining_downloads", -1) ?: -1
+                val allowed = info?.optInt("allowed_downloads", -1) ?: -1
+                if (left >= 0) "Works · $left of $allowed downloads left today" else "Works (signed in)"
+            } else {
+                // A small search: the info endpoints answer even with a wrong key, a search doesn't.
+                call(account, s, Request.Builder().url("https://${s.host}/api/v1/subtitles?languages=en&query=matrix").get())
+                "Works (API key only: a login allows more downloads a day)"
+            }
+            rotation.status[account.key] = "OK"
+            text
+        } catch (e: Exception) {
+            val msg = e.message ?: e.javaClass.simpleName
+            rotation.status[account.key] = msg
+            "Failed: $msg"
+        }
+    }
+
+    /** Signs in once per account that has a login; without one, the key alone is used. */
+    private fun session(account: OnlineAccount): Session {
+        sessions[account]?.let { return it }
+        val s = if (account.user.isEmpty()) {
+            Session(null, "api.opensubtitles.com")
+        } else {
+            val body = JSONObject().put("username", account.user).put("password", account.password).toString()
+            val json = call(account, Session(null, "api.opensubtitles.com"), Request.Builder().url("https://api.opensubtitles.com/api/v1/login").post(body.toRequestBody(JSON)))
+            val token = json.optString("token").ifEmpty { throw OnlineFailure("login failed: check the username and password", tryNext = true) }
+            Session(token, json.optString("base_url").ifEmpty { "api.opensubtitles.com" }.removePrefix("https://").trimEnd('/'))
+        }
+        sessions[account] = s
+        return s
+    }
+
+    private fun parseResults(json: JSONObject): List<SubResult> {
+        val data = json.optJSONArray("data") ?: return emptyList()
         val out = ArrayList<SubResult>()
         for (i in 0 until data.length()) {
             val a = data.getJSONObject(i).optJSONObject("attributes") ?: continue
@@ -89,59 +153,26 @@ class OpenSubtitles(private val http: OkHttpClient, private val io: CoroutineDis
                 hearingImpaired = a.optBoolean("hearing_impaired"),
             )
         }
-        out
+        return out
     }
 
-    /** Downloads one subtitle as SubRip into the app's cache; returns the file. */
-    suspend fun download(r: SubResult): File = withContext(io) {
-        login()
-        val body = JSONObject().put("file_id", r.fileId).put("sub_format", "srt").toString()
-        val json = call(Request.Builder().url("https://$host/api/v1/download").post(body.toRequestBody(JSON)))
-        val link = json.optString("link").ifEmpty { throw Failure(json.optString("message").ifEmpty { "No download link" }) }
-        val dir = File(cacheDir, "subtitles").apply { mkdirs() }
-        // Keep only a few: they are small, but the cache is shared with posters.
-        dir.listFiles()?.sortedBy { it.lastModified() }?.dropLast(10)?.forEach { it.delete() }
-        val file = File(dir, "${r.fileId}.srt")
-        http.newCall(Request.Builder().url(link).header("User-Agent", agent).build()).execute().use { res ->
-            if (!res.isSuccessful) throw Failure("Download failed (HTTP ${res.code})")
-            file.outputStream().use { out -> res.body!!.byteStream().copyTo(out) }
-        }
-        file
-    }
-
-    /** With an account set: signs in once (per account) for the higher download allowance. */
-    private fun login() {
-        val user = prefs.openSubsUser
-        if (user.isEmpty()) {
-            token = null
-            host = "api.opensubtitles.com"
-            return
-        }
-        if (token != null && tokenFor == user) return
-        val body = JSONObject().put("username", user).put("password", prefs.openSubsPassword).toString()
-        val json = call(Request.Builder().url("https://api.opensubtitles.com/api/v1/login").post(body.toRequestBody(JSON)), auth = false)
-        token = json.optString("token").ifEmpty { throw Failure("OpenSubtitles login failed: check the username and password") }
-        tokenFor = user
-        json.optString("base_url").takeIf { it.isNotEmpty() }?.let { host = it.removePrefix("https://").trimEnd('/') }
-    }
-
-    private fun call(b: Request.Builder, auth: Boolean = true): JSONObject {
-        val key = prefs.openSubsKey.ifEmpty { throw Failure("No OpenSubtitles API key set") }
-        b.header("Api-Key", key).header("User-Agent", agent).header("Accept", "application/json")
-        if (auth) token?.let { b.header("Authorization", "Bearer $it") }
+    private fun call(account: OnlineAccount, s: Session, b: Request.Builder): JSONObject {
+        b.header("Api-Key", account.key.trim()).header("User-Agent", agent).header("Accept", "application/json")
+        s.token?.let { b.header("Authorization", "Bearer $it") }
         http.newCall(b.build()).execute().use { res ->
             val text = res.body?.string().orEmpty()
             if (!res.isSuccessful) {
                 val msg = runCatching { JSONObject(text).optString("message") }.getOrNull().orEmpty()
-                throw Failure(
-                    when (res.code) {
-                        401, 403 -> "OpenSubtitles refused the API key" + if (msg.isNotEmpty()) ": $msg" else ""
-                        406, 429 -> msg.ifEmpty { "Daily download limit reached; try again tomorrow" }
-                        else -> msg.ifEmpty { "OpenSubtitles error (HTTP ${res.code})" }
-                    },
-                )
+                if (res.code == 401 || res.code == 403) sessions.remove(account)
+                // The account (or the service) is the problem: another account may work.
+                throw when (res.code) {
+                    401, 403 -> OnlineFailure("key or login refused" + if (msg.isNotEmpty()) " ($msg)" else "", tryNext = true)
+                    406, 429 -> OnlineFailure(msg.ifEmpty { "daily download limit reached" }, tryNext = true)
+                    in 500..599 -> OnlineFailure("OpenSubtitles is not answering (HTTP ${res.code})", tryNext = true)
+                    else -> OnlineFailure(msg.ifEmpty { "OpenSubtitles error (HTTP ${res.code})" }, tryNext = false)
+                }
             }
-            return runCatching { JSONObject(text) }.getOrElse { throw Failure("Unexpected answer from OpenSubtitles") }
+            return runCatching { JSONObject(text) }.getOrElse { throw OnlineFailure("unexpected answer from OpenSubtitles", tryNext = true) }
         }
     }
 

@@ -16,7 +16,10 @@ import io.github.sardinemehico.iptvplayer.data.db.Db
 import io.github.sardinemehico.iptvplayer.data.model.ContentType
 import io.github.sardinemehico.iptvplayer.data.net.AppDns
 import io.github.sardinemehico.iptvplayer.data.online.CastPhotos
+import io.github.sardinemehico.iptvplayer.data.online.OnlineAccount
+import io.github.sardinemehico.iptvplayer.data.online.OnlineService
 import io.github.sardinemehico.iptvplayer.data.online.OpenSubtitles
+import io.github.sardinemehico.iptvplayer.data.online.Tmdb
 import io.github.sardinemehico.iptvplayer.data.repo.Repository
 import io.github.sardinemehico.iptvplayer.data.repo.Sort
 import io.github.sardinemehico.iptvplayer.data.source.AdultNames
@@ -134,6 +137,9 @@ class AppGraph(private val app: Application) {
         val version = app.packageManager.getPackageInfo(app.packageName, 0).versionName
         OpenSubtitles(http, io, prefs, app.cacheDir, "WorldTV v$version")
     }
+
+    /** Cast, ratings and trailers from TMDB (the user's own keys); Wikipedia covers cast without them. */
+    val tmdb by lazy { Tmdb(http, io, prefs) }
 
     /** Cast photos for movie and series pages (Wikipedia; needs a descriptive User-Agent). */
     val castPhotos by lazy { CastPhotos(imageHttp, io) }
@@ -322,19 +328,24 @@ class Prefs(private val sp: SharedPreferences) {
         get() = sp.getString("subs_language", "").orEmpty()
         set(v) = sp.edit().putString("subs_language", v).apply()
 
-    /** OpenSubtitles.com API key for online subtitles (free, the user's own); empty = off. */
-    var openSubsKey: String
-        get() = sp.getString("opensubs_key", "").orEmpty()
-        set(v) = sp.edit().putString("opensubs_key", v.trim()).apply()
+    /**
+     * Settings > Online accounts: the user's own keys per service, tried in order; when one fails
+     * (refused, daily limit, server down) the next is used. 2.01 kept a single OpenSubtitles
+     * account in "opensubs_key/user/password": it becomes the first in the list.
+     */
+    fun accounts(service: OnlineService): List<OnlineAccount> {
+        sp.getString("accounts_${service.id}", null)?.let { return OnlineAccount.listFromJson(it) }
+        if (service == OnlineService.OPENSUBTITLES) {
+            val key = sp.getString("opensubs_key", "").orEmpty()
+            if (key.isNotEmpty()) {
+                return listOf(OnlineAccount(key, sp.getString("opensubs_user", "").orEmpty(), sp.getString("opensubs_password", "").orEmpty()))
+            }
+        }
+        return emptyList()
+    }
 
-    /** Optional OpenSubtitles account: more downloads per day than without one. */
-    var openSubsUser: String
-        get() = sp.getString("opensubs_user", "").orEmpty()
-        set(v) = sp.edit().putString("opensubs_user", v.trim()).apply()
-
-    var openSubsPassword: String
-        get() = sp.getString("opensubs_password", "").orEmpty()
-        set(v) = sp.edit().putString("opensubs_password", v).apply()
+    fun setAccounts(service: OnlineService, list: List<OnlineAccount>) =
+        sp.edit().putString("accounts_${service.id}", OnlineAccount.listToJson(list)).remove("opensubs_key").remove("opensubs_user").remove("opensubs_password").apply()
 
     /** Reset app: everything back to a fresh install, except the TV / Mobile layout choice. */
     fun resetAll() {
