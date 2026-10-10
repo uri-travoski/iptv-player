@@ -13,8 +13,8 @@ android {
         applicationId = "io.github.sardinemehico.iptvplayer"
         minSdk = 24
         targetSdk = 36
-        versionCode = 30
-        versionName = "0.1.29"
+        versionCode = 31
+        versionName = "0.1.30"
         // English only for now; keeps unused library translations out of the APK.
         resourceConfigurations += listOf("en")
         // TV boxes are ARM. Keeps the FFmpeg audio decoder to two ~1.4 MB native libraries.

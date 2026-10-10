@@ -24,7 +24,6 @@
     <string name="entries_hint">OK: show or hide this entry. Show all goes back to the defaults: adult ones stay hidden (select one to show it). Hidden entries are left out everywhere, including All, Favourites and search.</string>
     <string name="categories_hidden_entries">(%1$d hidden)</string>
     <string name="categories_show_all">Show all</string>
-    <string name="categories_hide_all">Hide all</string>
     <string name="categories_adult_words">Adult words</string>
     <string name="categories_hide_adult">Hide adult</string>
     <string name="categories_hide_adult_q">Hide all adult content in %1$s?</string>

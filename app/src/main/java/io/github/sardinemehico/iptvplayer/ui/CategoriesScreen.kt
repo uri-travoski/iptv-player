@@ -58,8 +58,7 @@ class CategoriesScreen(
             root.findViewById<View>(R.id.adult_note).visibility = View.GONE
             root.findViewById<TextView>(R.id.hint).setText(R.string.entries_hint)
         }
-        root.findViewById<View>(R.id.show_all).setOnClickListener { setAll(hidden = false) }
-        root.findViewById<View>(R.id.hide_all).setOnClickListener { setAll(hidden = true) }
+        root.findViewById<View>(R.id.show_all).setOnClickListener { showAll() }
         list.layoutManager = LinearLayoutManager(activity)
         list.adapter = adapter
         list.itemAnimator = null
@@ -134,20 +133,15 @@ class CategoriesScreen(
     }
 
     /**
-     * Hide all: every row hidden by hand. Show all: back to the defaults (own choices cleared),
-     * so adult ones stay hidden: marking everything "shown by hand" would switch adult hiding off.
+     * Show all: back to the defaults (own choices cleared), so adult ones stay hidden: marking
+     * everything "shown by hand" would switch adult hiding off.
      */
-    private fun setAll(hidden: Boolean) {
+    private fun showAll() {
         scope.launch {
-            val ids = adapter.rows.map { it.id }
-            if (hidden) {
-                save(ids, true)
-            } else {
-                graph.repo.resetToDefault(playlist.id, type, ids, entries = category != null)
-                // Adult ones are hidden again by a background re-check; the list updates when it ends.
-                val tab = type
-                graph.rescanAdult(listOf(playlist.id)) { if (type == tab) show(type) }
-            }
+            graph.repo.resetToDefault(playlist.id, type, adapter.rows.map { it.id }, entries = category != null)
+            // Adult ones are hidden again by a background re-check; the list updates when it ends.
+            val tab = type
+            graph.rescanAdult(listOf(playlist.id)) { if (type == tab) show(type) }
             show(type)
         }
     }
