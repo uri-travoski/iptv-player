@@ -77,6 +77,7 @@
     <string name="group_create">Create</string>
     <string name="group_save">Save</string>
     <string name="group_created">Group “%1$s” created · Menu (long-press) on a channel adds it</string>
+    <string name="group_new_with">＋ New group…</string>
     <string name="group_add_to">Add to %1$s</string>
     <string name="group_remove_from">Remove from %1$s</string>
     <string name="group_added">Added to %1$s</string>
@@ -96,8 +97,8 @@
     <string name="ctl_aspect_fit">Aspect: Fit</string>
     <string name="ctl_aspect_fill">Aspect: Stretch</string>
     <string name="ctl_aspect_zoom">Aspect: Zoom</string>
-    <string name="ctl_fav_add">Favourite</string>
-    <string name="ctl_fav_remove">Unfavourite</string>
+    <string name="ctl_fav_add">Favourites and groups</string>
+    <string name="ctl_fav_remove">Favourites and groups (★ = a favourite)</string>
     <string name="track_default">Default</string>
     <string name="track_off">Off</string>
     <string name="no_tracks">None in this stream</string>

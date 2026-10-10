@@ -129,7 +129,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         root.findViewById<View>(R.id.ctl_audio).setOnClickListener { chooseTrack(C.TRACK_TYPE_AUDIO) }
         root.findViewById<View>(R.id.ctl_subs).setOnClickListener { chooseTrack(C.TRACK_TYPE_TEXT) }
         ctlAspect.setOnClickListener { cycleAspect() }
-        ctlFav.setOnClickListener { playingRow?.let { toggleFavourite(playingIndex, it) } }
+        ctlFav.setOnClickListener { playingRow?.let { onChannelMenu(playingIndex, it) } }
         root.findViewById<View>(R.id.ctl_external).setOnClickListener { openExternal() }
         ctlAspect.contentDescription = activity.getString(PlayerUi.aspectLabel(activity))
         if (mobile) root.findViewById<View>(R.id.osd_top).visibility = View.VISIBLE
@@ -433,31 +433,39 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     // ---- own groups ----
 
     /**
-     * Menu (long-press) on a channel: with no groups of their own yet, toggles the favourite as it
-     * always did; else a choice of Favourites and every group, each to add the channel or take it out.
+     * Menu (long-press) on a channel, or the player's ★ button: Favourites and every group of the
+     * viewer's, each to add the channel or take it out, and "New group…" to make one with it in.
      */
     private fun onChannelMenu(index: Int, row: EntryRow) {
         val p = playlist ?: return
         scope.launch {
             val groups = graph.repo.groups(p.id)
-            if (groups.isEmpty()) return@launch toggleFavourite(index, row)
             val fav = graph.repo.isFavourite(p.id, ContentType.LIVE, row.itemId)
             val inGroups = graph.repo.groupsOf(row.itemId, groups.map { it.id })
             val labels = ArrayList<String>()
             labels += activity.getString(if (fav) R.string.group_remove_from else R.string.group_add_to, activity.getString(R.string.favourites))
             groups.forEach { labels += activity.getString(if (it.id in inGroups) R.string.group_remove_from else R.string.group_add_to, it.name) }
+            labels += activity.getString(R.string.group_new_with)
+            // In full screen the controls stay up while the menu is open.
+            handler.removeCallbacks(hideBanner)
             android.app.AlertDialog.Builder(activity)
                 .setTitle(row.name)
                 .setItems(labels.toTypedArray()) { _, which ->
-                    if (which == 0) return@setItems toggleFavourite(index, row)
-                    val g = groups[which - 1]
-                    val add = g.id !in inGroups
-                    scope.launch {
-                        graph.repo.setInGroup(g.id, row.itemId, add)
-                        activity.toast(activity.getString(if (add) R.string.group_added else R.string.group_removed, g.name))
-                        if (categoryKey == Repository.groupKey(g.id) && !fullscreen) selectCategory(categoryIndex)
+                    when (which) {
+                        0 -> toggleFavourite(index, row)
+                        labels.size - 1 -> askGroupName(null, withChannel = row)
+                        else -> {
+                            val g = groups[which - 1]
+                            val add = g.id !in inGroups
+                            scope.launch {
+                                graph.repo.setInGroup(g.id, row.itemId, add)
+                                activity.toast(activity.getString(if (add) R.string.group_added else R.string.group_removed, g.name))
+                                if (categoryKey == Repository.groupKey(g.id) && !fullscreen) selectCategory(categoryIndex)
+                            }
+                        }
                     }
                 }
+                .setOnDismissListener { if (fullscreen && controls.visibility == View.VISIBLE) scheduleHide() }
                 .show()
         }
     }
@@ -474,8 +482,11 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
             .show()
     }
 
-    /** Name for a new group, or a new name for [group]. */
-    private fun askGroupName(group: Group?) {
+    /**
+     * Name for a new group, or a new name for [group]. [withChannel]: the new group starts with
+     * that channel, and the list being watched stays as it is (no jump to the new group).
+     */
+    private fun askGroupName(group: Group?, withChannel: EntryRow? = null) {
         val p = playlist ?: return
         val field = EditText(activity).apply {
             setSingleLine()
@@ -496,6 +507,17 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
             if (name.isEmpty()) return
             dialog.dismiss()
             scope.launch {
+                if (withChannel != null) {
+                    graph.repo.setInGroup(graph.repo.addGroup(p.id, name), withChannel.itemId, true)
+                    activity.toast(activity.getString(R.string.group_added, name))
+                    if (cats.query == null) {
+                        loadCategories()
+                        categoryIndex = cats.indexOf(categoryKey)
+                        categoryAdapter.selected = categoryIndex
+                        markPlayingCategory()
+                    }
+                    return@launch
+                }
                 val key = if (group == null) Repository.groupKey(graph.repo.addGroup(p.id, name)) else {
                     graph.repo.renameGroup(group.id, name)
                     categoryKey
