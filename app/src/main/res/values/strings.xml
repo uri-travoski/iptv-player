@@ -70,6 +70,21 @@
     <string name="reconnecting">Reconnecting…</string>
     <string name="stream_failed">This stream is not available right now</string>
     <string name="favourite_added">Added to favourites</string>
+    <string name="favourites">Favourites</string>
+    <string name="group_add">＋ Add group</string>
+    <string name="group_add_title">New group</string>
+    <string name="group_name_hint">Group name, e.g. Sports</string>
+    <string name="group_create">Create</string>
+    <string name="group_save">Save</string>
+    <string name="group_created">Group “%1$s” created · Menu (long-press) on a channel adds it</string>
+    <string name="group_add_to">Add to %1$s</string>
+    <string name="group_remove_from">Remove from %1$s</string>
+    <string name="group_added">Added to %1$s</string>
+    <string name="group_removed">Removed from %1$s</string>
+    <string name="group_rename">Rename group</string>
+    <string name="group_delete">Delete group</string>
+    <string name="group_delete_q">Delete “%1$s”?</string>
+    <string name="group_delete_msg">Only the group goes: its channels stay in the playlist.</string>
     <string name="favourite_removed">Removed from favourites</string>
 
     <string name="ctl_prev">Previous channel</string>

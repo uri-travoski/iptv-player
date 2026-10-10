@@ -63,6 +63,8 @@ class CategoryAdapter(
     private val onFocused: (Int) -> Unit,
     private val onClicked: (Int) -> Unit,
     private val layout: Int = R.layout.row_category,
+    /** Long-press (touch): what the remote's Menu key does on a category. */
+    private val onLongClicked: ((Int) -> Unit)? = null,
 ) : RecyclerView.Adapter<CategoryAdapter.VH>() {
 
     var items: List<CategoryRow> = emptyList()
@@ -114,6 +116,12 @@ class CategoryAdapter(
             }
             text.setOnClickListener {
                 if (bindingAdapterPosition != RecyclerView.NO_POSITION) onClicked(bindingAdapterPosition)
+            }
+            if (onLongClicked != null) {
+                text.setOnLongClickListener {
+                    if (bindingAdapterPosition != RecyclerView.NO_POSITION) onLongClicked.invoke(bindingAdapterPosition)
+                    true
+                }
             }
         }
     }

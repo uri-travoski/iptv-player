@@ -79,6 +79,27 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
         )
         createProgress(db)
         createHiddenCategories(db)
+        createGroups(db)
+    }
+
+    /** The viewer's own Live TV groups ("Add group") and their channels, kept over re-syncs like favourites. */
+    private fun createGroups(db: SQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS user_group (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                playlist_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                created INTEGER NOT NULL
+            )""",
+        )
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS user_group_item (
+                group_id INTEGER NOT NULL,
+                item_id TEXT NOT NULL,
+                added INTEGER NOT NULL,
+                PRIMARY KEY (group_id, item_id)
+            )""",
+        )
     }
 
     /**
@@ -159,6 +180,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
             db.execSQL("ALTER TABLE hidden_item ADD COLUMN auto INTEGER NOT NULL DEFAULT 0")
         }
         if (oldVersion < 7) createSortIndexes(db)
+        if (oldVersion < 8) createGroups(db)
         if (oldVersion < 6) {
             // The provider's is_adult flag; and every playlist gets a PIN, 000000 by default.
             db.execSQL("ALTER TABLE entry ADD COLUMN adult INTEGER NOT NULL DEFAULT 0")
@@ -171,6 +193,6 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
     }
 
     companion object {
-        const val VERSION = 7
+        const val VERSION = 8
     }
 }

@@ -128,7 +128,7 @@
                 style="@style/Text.Secondary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="OK: play, OK again: full screen · Menu: favourite"
+                android:text="OK: play, OK again: full screen · Menu: favourite or group"
                 android:textSize="14sp" />
         </LinearLayout>
     </LinearLayout>

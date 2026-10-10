@@ -37,6 +37,9 @@ data class Playlist(
 
 data class CategoryRow(val key: String, val name: String)
 
+/** One of the viewer's own Live TV groups. */
+data class Group(val id: Long, val name: String)
+
 /** Order of a Movies / Series list (App: the Sort button). */
 enum class Sort { NEWEST, RATING, NAME, PROVIDER }
 
@@ -127,6 +130,8 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             w.delete("hidden_item", "playlist_id = ?", args)
             w.delete("shown_category", "playlist_id = ?", args)
             w.delete("shown_item", "playlist_id = ?", args)
+            w.delete("user_group_item", "group_id IN (SELECT id FROM user_group WHERE playlist_id = ?)", args)
+            w.delete("user_group", "playlist_id = ?", args)
             w.delete("playlist", "id = ?", args)
             w.setTransactionSuccessful()
         } finally {
@@ -157,10 +162,14 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
 
     /**
      * Categories of one library, with the virtual "All" and "Favourites" entries first
-     * (and "Continue watching" for movies and series).
+     * (and "Continue watching" for movies and series). Live TV: the viewer's own groups come
+     * before those, newest first.
      */
     suspend fun categories(playlistId: Long, type: ContentType): List<CategoryRow> = withContext(io) {
-        val out = arrayListOf(CategoryRow(KEY_ALL, "All"), CategoryRow(KEY_FAV, "Favourites"))
+        val out = ArrayList<CategoryRow>()
+        if (type == ContentType.LIVE) groupsNow(playlistId).forEach { out += CategoryRow(groupKey(it.id), it.name) }
+        out += CategoryRow(KEY_ALL, "All")
+        out += CategoryRow(KEY_FAV, "Favourites")
         if (type != ContentType.LIVE) out += CategoryRow(KEY_CONTINUE, "Continue watching")
         db.readableDatabase.rawQuery(
             "SELECT cat_id, name FROM category c WHERE playlist_id = ? AND type = ? AND NOT EXISTS(" +
@@ -569,6 +578,67 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         ).use { it.moveToFirst() }
     }
 
+    // ---- own groups (Live TV) ----
+
+    private fun groupsNow(playlistId: Long): List<Group> =
+        db.readableDatabase.rawQuery("SELECT id, name FROM user_group WHERE playlist_id = ? ORDER BY created DESC, id DESC", arrayOf(playlistId.toString())).use { c ->
+            val out = ArrayList<Group>(c.count)
+            while (c.moveToNext()) out += Group(c.getLong(0), c.getString(1))
+            out
+        }
+
+    /** The playlist's own groups, newest first. */
+    suspend fun groups(playlistId: Long): List<Group> = withContext(io) { groupsNow(playlistId) }
+
+    suspend fun addGroup(playlistId: Long, name: String): Long = withContext(io) {
+        val v = ContentValues().apply {
+            put("playlist_id", playlistId)
+            put("name", name)
+            put("created", System.currentTimeMillis())
+        }
+        db.writableDatabase.insertOrThrow("user_group", null, v)
+    }
+
+    suspend fun renameGroup(groupId: Long, name: String) = withContext(io) {
+        db.writableDatabase.update("user_group", ContentValues().apply { put("name", name) }, "id = ?", arrayOf(groupId.toString()))
+    }
+
+    suspend fun deleteGroup(groupId: Long) = withContext(io) {
+        val w = db.writableDatabase
+        w.beginTransaction()
+        try {
+            w.delete("user_group_item", "group_id = ?", arrayOf(groupId.toString()))
+            w.delete("user_group", "id = ?", arrayOf(groupId.toString()))
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
+    }
+
+    /** Ids of the groups channel [itemId] is in. */
+    suspend fun groupsOf(itemId: String, groupIds: Collection<Long>): Set<Long> = withContext(io) {
+        if (groupIds.isEmpty()) return@withContext emptySet()
+        db.readableDatabase.rawQuery(
+            "SELECT group_id FROM user_group_item WHERE item_id = ? AND group_id IN (${groupIds.joinToString(",")})",
+            arrayOf(itemId),
+        ).use { c -> HashSet<Long>().also { while (c.moveToNext()) it += c.getLong(0) } }
+    }
+
+    /** Adds a channel to a group (at the end) or takes it out. */
+    suspend fun setInGroup(groupId: Long, itemId: String, inGroup: Boolean) = withContext(io) {
+        val w = db.writableDatabase
+        if (inGroup) {
+            val v = ContentValues().apply {
+                put("group_id", groupId)
+                put("item_id", itemId)
+                put("added", System.currentTimeMillis())
+            }
+            w.insertWithOnConflict("user_group_item", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE)
+        } else {
+            w.delete("user_group_item", "group_id = ? AND item_id = ?", arrayOf(groupId.toString(), itemId))
+        }
+    }
+
     // ---- continue watching ----
 
     suspend fun progress(playlistId: Long, type: ContentType, itemId: String): Progress? = withContext(io) {
@@ -655,7 +725,10 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
                 "WHERE f.playlist_id = e.playlist_id AND f.type = e.type AND f.item_id = e.item_id)") to base
             KEY_CONTINUE -> ("WHERE e.playlist_id = ? AND e.type = ? AND EXISTS(SELECT 1 FROM progress p " +
                 "WHERE p.playlist_id = e.playlist_id AND p.type = e.type AND p.item_id = e.item_id)") to base
-            else -> if (key.startsWith(SEARCH_PREFIX)) {
+            else -> if (groupId(key) != null) {
+                ("WHERE e.playlist_id = ? AND e.type = ? AND EXISTS(SELECT 1 FROM user_group_item g " +
+                    "WHERE g.group_id = ? AND g.item_id = e.item_id)") to (base + groupId(key).toString())
+            } else if (key.startsWith(SEARCH_PREFIX)) {
                 // Substring match on the name. A scan of one library: fine on the IO thread even for 50k rows.
                 "WHERE e.playlist_id = ? AND e.type = ? AND e.name LIKE ? ESCAPE '\\'" to
                     (base + ("%" + likeEscape(key.removePrefix(SEARCH_PREFIX)) + "%"))
@@ -670,6 +743,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         key == KEY_CONTINUE -> "(SELECT p.updated FROM progress p WHERE p.playlist_id = e.playlist_id AND p.type = e.type " +
             "AND p.item_id = e.item_id) DESC"
         key == KEY_FAV -> "e.sort"
+        groupId(key) != null -> "(SELECT g.added FROM user_group_item g WHERE g.group_id = ${groupId(key)} AND g.item_id = e.item_id)"
         else -> when (sort) {
             Sort.NEWEST -> "e.added DESC, e.sort"
             Sort.RATING -> "CAST(e.rating AS REAL) DESC, e.sort" // no rating counts as 0: last
@@ -708,6 +782,13 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         const val KEY_FAV = "\u0000fav"
         const val KEY_CONTINUE = "\u0000continue"
         private const val SEARCH_PREFIX = "\u0000search:"
+        private const val GROUP_PREFIX = "\u0000group:"
+
+        /** List key of one of the viewer's own groups. */
+        fun groupKey(groupId: Long) = GROUP_PREFIX + groupId
+
+        /** The group id in a group's list key, or null for any other key. */
+        fun groupId(key: String?): Long? = key?.takeIf { it.startsWith(GROUP_PREFIX) }?.removePrefix(GROUP_PREFIX)?.toLongOrNull()
 
         /** List key for a name search, usable wherever a category key is. */
         fun searchKey(query: String) = SEARCH_PREFIX + query.trim()

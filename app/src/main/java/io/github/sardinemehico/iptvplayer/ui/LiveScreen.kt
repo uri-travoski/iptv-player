@@ -14,7 +14,9 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.sardinemehico.iptvplayer.MainActivity
 import io.github.sardinemehico.iptvplayer.R
 import io.github.sardinemehico.iptvplayer.data.model.ContentType
+import io.github.sardinemehico.iptvplayer.data.repo.CategoryRow
 import io.github.sardinemehico.iptvplayer.data.repo.EntryRow
+import io.github.sardinemehico.iptvplayer.data.repo.Group
 import io.github.sardinemehico.iptvplayer.data.repo.Playlist
 import io.github.sardinemehico.iptvplayer.data.repo.Repository
 import io.github.sardinemehico.iptvplayer.data.source.XtreamCredentials
@@ -68,8 +70,9 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         onFocused = ::onCategoryFocused,
         onClicked = ::onCategoryClicked,
         layout = if (mobile) R.layout.row_category_chip else R.layout.row_category,
+        onLongClicked = ::onCategoryMenu,
     )
-    private val channelAdapter = PagedEntryAdapter(scope, ::onChannelClicked, onLongClicked = ::toggleFavourite)
+    private val channelAdapter = PagedEntryAdapter(scope, ::onChannelClicked, onLongClicked = ::onChannelMenu)
     private val cats = CategoryList(categoryAdapter) { activity.getString(R.string.search_results, it) }
 
     private var playlist: Playlist? = null
@@ -194,7 +197,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
                 KeyEvent.KEYCODE_INFO -> showOverlay(withControls = true)
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY,
                 KeyEvent.KEYCODE_MEDIA_PAUSE -> togglePause()
-                KeyEvent.KEYCODE_MENU -> playingRow?.let { toggleFavourite(playingIndex, it) }
+                KeyEvent.KEYCODE_MENU -> playingRow?.let { onChannelMenu(playingIndex, it) }
                 else -> return false
             }
             return true
@@ -202,10 +205,14 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         when (keyCode) {
             KeyEvent.KEYCODE_MENU -> {
                 val focused = activity.currentFocus ?: return false
+                if (focused.parent === categoriesView) {
+                    onCategoryMenu(categoriesView.getChildAdapterPosition(focused))
+                    return true
+                }
                 if (focused.parent !== channelsView) return false
                 val pos = channelsView.getChildAdapterPosition(focused)
                 val row = channelAdapter.rowAt(pos) ?: return true
-                toggleFavourite(pos, row)
+                onChannelMenu(pos, row)
                 return true
             }
             KeyEvent.KEYCODE_CHANNEL_UP -> { zap(+1); return true }
@@ -223,12 +230,12 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
             urls = XtreamUrls(XtreamCredentials(p.url, p.username.orEmpty(), p.password.orEmpty()))
             liveExt = if (p.formats.isEmpty() || "ts" in p.formats) "ts" else "m3u8"
         }
-        cats.all = graph.repo.categories(p.id, ContentType.LIVE)
+        loadCategories()
 
         // Favourites first when there are any (they are the viewer's own list); else the last category.
         val hasFavourites = graph.repo.count(p.id, ContentType.LIVE, Repository.KEY_FAV) > 0
         val startKey = if (hasFavourites) Repository.KEY_FAV else graph.prefs.lastLiveCategory.takeUnless { it == Repository.KEY_FAV }
-        val startIndex = cats.indexOf(startKey).coerceAtLeast(0)
+        val startIndex = indexOrAll(startKey)
         selectCategory(startIndex)
 
         // Restore the last channel and play it in the preview.
@@ -244,7 +251,20 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         categoriesView.scrollToPosition(startIndex)
     }
 
+    /** "＋ Add group" on top, then the viewer's own groups (newest first), All, Favourites and the provider's. */
+    private suspend fun loadCategories() {
+        val p = playlist ?: return
+        cats.all = listOf(CategoryRow(KEY_ADD_GROUP, activity.getString(R.string.group_add))) + graph.repo.categories(p.id, ContentType.LIVE)
+    }
+
+    /** Position of [key] in the list, or of All when it isn't there. */
+    private fun indexOrAll(key: String?): Int = cats.indexOf(key).takeIf { it >= 0 } ?: cats.indexOf(Repository.KEY_ALL).coerceAtLeast(0)
+
     private fun onCategoryFocused(index: Int) {
+        if (cats.shown.getOrNull(index)?.key == KEY_ADD_GROUP) {
+            pendingCategory?.cancel() // a button, not a list: the channels stay as they are
+            return
+        }
         if (index == categoryIndex || restoringFocus) return
         // Debounce: holding Down through the category list must not run a query per row.
         pendingCategory?.cancel()
@@ -256,6 +276,10 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
 
     private fun onCategoryClicked(index: Int) {
         pendingCategory?.cancel()
+        if (cats.shown.getOrNull(index)?.key == KEY_ADD_GROUP) {
+            askGroupName(null)
+            return
+        }
         scope.launch {
             if (index != categoryIndex) selectCategory(index)
             focusChannel(0)
@@ -263,7 +287,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     }
 
     private suspend fun selectCategory(index: Int) {
-        val cat = cats.shown.getOrNull(index) ?: return
+        val cat = cats.shown.getOrNull(index)?.takeUnless { it.key == KEY_ADD_GROUP } ?: return
         // Picking from the full list drops a half-typed search; inside search results it stays.
         if (cats.query == null) searchBox.clearQuietly()
         categoryIndex = index
@@ -288,7 +312,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
                 val back = categoryKey.takeUnless { Repository.isSearch(it) } ?: graph.prefs.lastLiveCategory
                 cats.filter(null)
                 markPlayingCategory()
-                val i = cats.indexOf(back).coerceAtLeast(0)
+                val i = indexOrAll(back)
                 categoriesView.scrollToPosition(i)
                 selectCategory(i)
             }
@@ -406,6 +430,121 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         }
     }
 
+    // ---- own groups ----
+
+    /**
+     * Menu (long-press) on a channel: with no groups of their own yet, toggles the favourite as it
+     * always did; else a choice of Favourites and every group, each to add the channel or take it out.
+     */
+    private fun onChannelMenu(index: Int, row: EntryRow) {
+        val p = playlist ?: return
+        scope.launch {
+            val groups = graph.repo.groups(p.id)
+            if (groups.isEmpty()) return@launch toggleFavourite(index, row)
+            val fav = graph.repo.isFavourite(p.id, ContentType.LIVE, row.itemId)
+            val inGroups = graph.repo.groupsOf(row.itemId, groups.map { it.id })
+            val labels = ArrayList<String>()
+            labels += activity.getString(if (fav) R.string.group_remove_from else R.string.group_add_to, activity.getString(R.string.favourites))
+            groups.forEach { labels += activity.getString(if (it.id in inGroups) R.string.group_remove_from else R.string.group_add_to, it.name) }
+            android.app.AlertDialog.Builder(activity)
+                .setTitle(row.name)
+                .setItems(labels.toTypedArray()) { _, which ->
+                    if (which == 0) return@setItems toggleFavourite(index, row)
+                    val g = groups[which - 1]
+                    val add = g.id !in inGroups
+                    scope.launch {
+                        graph.repo.setInGroup(g.id, row.itemId, add)
+                        activity.toast(activity.getString(if (add) R.string.group_added else R.string.group_removed, g.name))
+                        if (categoryKey == Repository.groupKey(g.id) && !fullscreen) selectCategory(categoryIndex)
+                    }
+                }
+                .show()
+        }
+    }
+
+    /** Menu (long-press) on one of the viewer's groups: rename or delete it. Other categories: nothing. */
+    private fun onCategoryMenu(index: Int) {
+        val cat = cats.shown.getOrNull(index) ?: return
+        val id = Repository.groupId(cat.key) ?: return
+        android.app.AlertDialog.Builder(activity)
+            .setTitle(cat.name)
+            .setItems(arrayOf(activity.getString(R.string.group_rename), activity.getString(R.string.group_delete))) { _, which ->
+                if (which == 0) askGroupName(Group(id, cat.name)) else confirmDeleteGroup(Group(id, cat.name))
+            }
+            .show()
+    }
+
+    /** Name for a new group, or a new name for [group]. */
+    private fun askGroupName(group: Group?) {
+        val p = playlist ?: return
+        val field = EditText(activity).apply {
+            setSingleLine()
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            hint = activity.getString(R.string.group_name_hint)
+            if (group != null) { setText(group.name); setSelection(group.name.length) }
+        }
+        val pad = (20 * activity.resources.displayMetrics.density).toInt()
+        val box = android.widget.FrameLayout(activity).apply { setPadding(pad, pad / 2, pad, 0); addView(field) }
+        val dialog = android.app.AlertDialog.Builder(activity)
+            .setTitle(if (group == null) R.string.group_add_title else R.string.group_rename)
+            .setView(box)
+            .setPositiveButton(if (group == null) R.string.group_create else R.string.group_save, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        fun save() {
+            val name = field.text.toString().trim()
+            if (name.isEmpty()) return
+            dialog.dismiss()
+            scope.launch {
+                val key = if (group == null) Repository.groupKey(graph.repo.addGroup(p.id, name)) else {
+                    graph.repo.renameGroup(group.id, name)
+                    categoryKey
+                }
+                if (cats.query != null) searchBox.clearQuietly()
+                loadCategories()
+                val i = indexOrAll(key)
+                categoriesView.scrollToPosition(i)
+                selectCategory(i)
+                if (group == null) {
+                    activity.toast(activity.getString(R.string.group_created, name))
+                    focusCategory(i)
+                }
+            }
+        }
+        // The keyboard's Done, or Enter / OK from a remote or keyboard.
+        field.setOnEditorActionListener { _, actionId, event ->
+            val enter = event != null && event.keyCode == KeyEvent.KEYCODE_ENTER
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE || enter) {
+                if (event == null || event.action == KeyEvent.ACTION_DOWN) save()
+                true
+            } else {
+                false
+            }
+        }
+        dialog.setOnShowListener { dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener { save() } }
+        dialog.show()
+        field.requestFocus()
+    }
+
+    private fun confirmDeleteGroup(group: Group) {
+        android.app.AlertDialog.Builder(activity)
+            .setTitle(activity.getString(R.string.group_delete_q, group.name))
+            .setMessage(R.string.group_delete_msg)
+            .setPositiveButton(R.string.group_delete) { _, _ ->
+                scope.launch {
+                    graph.repo.deleteGroup(group.id)
+                    val back = categoryKey.takeUnless { it == Repository.groupKey(group.id) }
+                    loadCategories()
+                    val i = indexOrAll(back)
+                    categoriesView.scrollToPosition(i)
+                    selectCategory(i)
+                    focusCategory(i)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     // ---- full screen ----
 
     private fun enterFullscreen() {
@@ -437,8 +576,8 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         root.isFocusable = false
         preview.post { placeVideoInPreview() }
         scope.launch {
-            // Favourites may have changed while in full screen.
-            if (categoryKey == Repository.KEY_FAV) selectCategory(categoryIndex)
+            // Favourites and groups may have changed while in full screen.
+            if (categoryKey == Repository.KEY_FAV || Repository.groupId(categoryKey) != null) selectCategory(categoryIndex)
             focusChannel(playingIndex.coerceAtLeast(0)) {
                 restoringFocus = false
                 pendingCategory?.cancel()
@@ -521,5 +660,10 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         val left = loc[0] - parentLoc[0]
         val top = loc[1] - parentLoc[1]
         activity.setVideoRect(Rect(left, top, left + preview.width, top + preview.height))
+    }
+
+    private companion object {
+        /** The "＋ Add group" row: a button at the top of the category list, never a list itself. */
+        const val KEY_ADD_GROUP = "\u0000addgroup"
     }
 }
