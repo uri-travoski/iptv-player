@@ -49,10 +49,14 @@ object AgreementDialog {
             .create()
         dialog.setCanceledOnTouchOutside(false)
         dialog.show()
-        // Compact: a third of the screen wide, in the middle.
-        dialog.window?.setLayout(activity.resources.displayMetrics.widthPixels / 3, ViewGroup.LayoutParams.WRAP_CONTENT)
-        // The cursor starts on Continue, coloured like a selected tile, so one OK press finishes.
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.let { cont ->
+        // Shown before TV or Mobile is picked, so a phone is told apart by its screen size.
+        val phone = activity.resources.configuration.smallestScreenWidthDp < 600
+        // TV: compact, a third of the screen wide. Phone: a third is a sliver, so nearly full width.
+        val width = activity.resources.displayMetrics.widthPixels.let { if (phone) it * 9 / 10 else it / 3 }
+        dialog.window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
+        // TV: the cursor starts on Continue, coloured like a selected tile, so one OK press finishes.
+        // Not on a phone: focusable in touch mode, the first tap would only focus the button.
+        if (!phone) dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.let { cont ->
             cont.setTextColor(activity.getColor(R.color.text_primary))
             cont.setBackgroundResource(R.drawable.bg_tile)
             val pad = (24 * d).toInt()
