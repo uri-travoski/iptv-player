@@ -111,6 +111,25 @@ class AppGraph(private val app: Application) {
             .build()
     }
 
+    /**
+     * Posters of Home's Recently added rows, in a disk cache of their own: browsing thousands of
+     * posters in the grids (the main cache) never pushes them out. Filled when a playlist is
+     * loaded or reloaded (HomePosters); Home itself reads only from here, never the network.
+     */
+    val homeImages: ImageLoader by lazy {
+        ImageLoader.Builder(app)
+            .memoryCache { MemoryCache.Builder().maxSizeBytes(4L * 1024 * 1024).build() }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(app.cacheDir.resolve(HOME_IMAGES_DIR).toOkioPath())
+                    .maxSizeBytes(24L * 1024 * 1024)
+                    .build()
+            }
+            .components { add(OkHttpNetworkFetcherFactory(callFactory = { imageHttp })) }
+            .allowRgb565(true)
+            .build()
+    }
+
     val db: Db by lazy { Db(app) }
     /**
      * Diagnostics to the Supabase project. Its own low-priority thread and SQLite file, so it
@@ -185,6 +204,11 @@ class AppGraph(private val app: Application) {
         val cached = adultCache
         if (cached != null && cached.first == cats to entries) return cached.second
         return AdultNames(cats, entries).also { adultCache = (cats to entries) to it }
+    }
+
+    companion object {
+        /** Cache folder of [homeImages]. */
+        const val HOME_IMAGES_DIR = "home-images"
     }
 
     @Volatile
@@ -336,6 +360,11 @@ class Prefs(private val sp: SharedPreferences) {
         get() = sp.getString("live_sort", null)?.let { s -> Sort.values().firstOrNull { it.name == s } }
             ?.takeIf { it == Sort.NAME || it == Sort.NAME_DESC } ?: Sort.PROVIDER
         set(v) = sp.edit().putString("live_sort", v.name).apply()
+
+    /** Playlist and load ("id:lastSync") whose Recently added posters are already in the home cache. */
+    var homePostersFor: String?
+        get() = sp.getString("home_posters_for", null)
+        set(v) = sp.edit().putString("home_posters_for", v).apply()
 
     /** Settings > Automatic refresh: AutoRefresh.EVERY_START, DAILY (default) or EVERY_2_DAYS. */
     var autoRefresh: String

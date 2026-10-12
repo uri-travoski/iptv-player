@@ -1,5 +1,6 @@
 package com.worldtv.iptvplayer.data.sync
 
+import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteStatement
 import com.worldtv.iptvplayer.data.db.Db
@@ -26,6 +27,12 @@ import java.io.IOException
 import java.io.Reader
 
 class SyncException(message: String) : IOException(message)
+
+/** When a reload may date titles it hasn't seen before (see Syncer.stampFirstSeen). */
+object FirstSeen {
+    /** [known]: titles before the reload. [fresh]: undated titles not among them. */
+    fun shouldStamp(known: Long, fresh: Long): Boolean = known > 0 && fresh > 0 && fresh * 2 <= known
+}
 
 /**
  * Downloads a playlist and rewrites its rows. Each library is replaced inside one transaction:
@@ -174,6 +181,7 @@ class Syncer(
             val w = db.writableDatabase
             w.beginTransactionNonExclusive()
             try {
+                rememberAdded(w, p.id, FIRST_SEEN_TYPES)
                 deleteLibrary(w, p.id, null)
                 val insertEntry = w.compileStatement(INSERT_ENTRY)
                 val insertCategory = w.compileStatement(INSERT_CATEGORY)
@@ -204,6 +212,7 @@ class Syncer(
                     if (++n % 2000 == 0) progress("Entries: $n")
                 }
                 progress("Entries: $n")
+                FIRST_SEEN_TYPES.forEach { stampFirstSeen(w, p.id, it) }
                 w.setTransactionSuccessful()
             } finally {
                 w.endTransaction()
@@ -233,11 +242,14 @@ class Syncer(
         val w = db.writableDatabase
         w.beginTransactionNonExclusive()
         try {
+            val dated = type in FIRST_SEEN_TYPES
+            if (dated) rememberAdded(w, playlistId, listOf(type))
             deleteLibrary(w, playlistId, type)
             val insertCategory = w.compileStatement(INSERT_CATEGORY)
             categories.forEachIndexed { i, cat -> bindCategory(insertCategory, playlistId, cat, i) }
             val insertEntry = w.compileStatement(INSERT_ENTRY)
             fill { e -> bindEntry(insertEntry, playlistId, e) }
+            if (dated) stampFirstSeen(w, playlistId, type)
             w.setTransactionSuccessful()
         } finally {
             w.endTransaction()
@@ -253,6 +265,45 @@ class Syncer(
             val args = arrayOf(playlistId.toString(), type.ordinal.toString())
             w.delete("entry", "playlist_id = ? AND type = ?", args)
             w.delete("category", "playlist_id = ? AND type = ?", args)
+        }
+    }
+
+    /**
+     * Before movies/series are replaced: each title's "added" date, so a reload can tell new
+     * titles from known ones (see [stampFirstSeen]). A temp table: this connection only, gone on close.
+     */
+    private fun rememberAdded(w: SQLiteDatabase, playlistId: Long, types: List<ContentType>) {
+        w.execSQL("DROP TABLE IF EXISTS temp.prev_added")
+        w.execSQL("CREATE TEMP TABLE prev_added (type INTEGER NOT NULL, item_id TEXT NOT NULL, added INTEGER NOT NULL, PRIMARY KEY (type, item_id)) WITHOUT ROWID")
+        w.execSQL(
+            "INSERT INTO temp.prev_added SELECT type, item_id, added FROM entry WHERE playlist_id = ? AND type IN (${types.joinToString(",") { it.ordinal.toString() }})",
+            arrayOf<Any>(playlistId),
+        )
+    }
+
+    /**
+     * Titles the provider gives no date for (all of an M3U playlist; some Xtream servers) get the
+     * day they first appeared: a known title keeps the date it had, a new one gets now. So
+     * "Recently added" and the Newest sort work after the next reload. A first load dates
+     * nothing (everything would be "new"), nor does a reload where most titles look new (links
+     * that change every time, e.g. with a token in them).
+     */
+    private fun stampFirstSeen(w: SQLiteDatabase, playlistId: Long, type: ContentType) {
+        val args = arrayOf(playlistId.toString(), type.ordinal.toString())
+        val known = DatabaseUtils.longForQuery(w, "SELECT COUNT(*) FROM temp.prev_added WHERE type = ?", arrayOf(type.ordinal.toString()))
+        val isNew = "NOT EXISTS(SELECT 1 FROM temp.prev_added o WHERE o.type = entry.type AND o.item_id = entry.item_id)"
+        val fresh = DatabaseUtils.longForQuery(w, "SELECT COUNT(*) FROM entry WHERE playlist_id = ? AND type = ? AND added = 0 AND $isNew", args)
+        w.execSQL(
+            "UPDATE entry SET added = (SELECT o.added FROM temp.prev_added o WHERE o.type = entry.type AND o.item_id = entry.item_id) " +
+                "WHERE playlist_id = ? AND type = ? AND added = 0 AND EXISTS(SELECT 1 FROM temp.prev_added o " +
+                "WHERE o.type = entry.type AND o.item_id = entry.item_id AND o.added > 0)",
+            args,
+        )
+        if (FirstSeen.shouldStamp(known, fresh)) {
+            w.execSQL(
+                "UPDATE entry SET added = ? WHERE playlist_id = ? AND type = ? AND added = 0 AND $isNew",
+                arrayOf<Any>(System.currentTimeMillis() / 1000, playlistId, type.ordinal),
+            )
         }
     }
 
@@ -303,6 +354,9 @@ class Syncer(
 
     companion object {
         const val USER_AGENT = "IPTVPlayer/0.1 (Linux; Android)"
+
+        /** Libraries whose titles get a first-seen date when the provider gives none. */
+        private val FIRST_SEEN_TYPES = listOf(ContentType.MOVIE, ContentType.SERIES)
 
         private const val INSERT_CATEGORY =
             "INSERT OR REPLACE INTO category(playlist_id, type, cat_id, name, sort) VALUES (?,?,?,?,?)"

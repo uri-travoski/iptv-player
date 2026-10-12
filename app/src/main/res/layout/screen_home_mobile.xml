@@ -81,6 +81,14 @@
                 android:drawableStart="@drawable/ic_series"
                 android:text="@string/series" />
 
+            <include
+                android:id="@+id/recent_movies"
+                layout="@layout/section_recent" />
+
+            <include
+                android:id="@+id/recent_series"
+                layout="@layout/section_recent" />
+
             <LinearLayout
                 android:id="@+id/home_rows"
                 android:layout_width="match_parent"

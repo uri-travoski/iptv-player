@@ -678,6 +678,28 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         return out
     }
 
+    /**
+     * Home's "Recently added" row: the [limit] newest titles of [type] by the date they were
+     * added (the provider's, or first seen; see Syncer). Hidden and adult titles are left out.
+     * Empty when the playlist has no dates. Newest first via the entry_added index: quick at any size.
+     */
+    suspend fun recentlyAdded(playlistId: Long, type: ContentType, names: AdultNames, limit: Int = RECENT_SIZE): List<EntryRow> = withContext(io) {
+        val (where, args) = filter(playlistId, type, KEY_ALL)
+        val ids = ArrayList<String>()
+        db.readableDatabase.rawQuery(
+            "SELECT e.item_id, e.name, e.adult, c.name FROM entry e LEFT JOIN category c ON c.playlist_id = e.playlist_id " +
+                "AND c.type = e.type AND c.cat_id = e.category_id $where AND e.added > 0 ORDER BY e.added DESC, e.sort LIMIT ${limit * 4}",
+            args,
+        ).use { c ->
+            while (c.moveToNext() && ids.size < limit) {
+                val adult = c.getInt(2) == 1 || names.isAdultEntry(c.getString(1)) || (!c.isNull(3) && names.isAdultCategory(c.getString(3)))
+                if (!adult) ids += c.getString(0)
+            }
+        }
+        val byId = rowsById(playlistId, type, ids).associateBy { it.itemId }
+        ids.mapNotNull { byId[it] }
+    }
+
     // ---- history and reset ----
 
     /**
@@ -1027,6 +1049,9 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             "entry", "category", "favourite", "progress", "hidden_category", "hidden_item", "shown_category", "shown_item",
             "user_group_item", "user_group", "live_watch", "most_watched", "playlist",
         )
+
+        /** Titles in each of Home's Recently added rows. */
+        const val RECENT_SIZE = 30
 
         const val MIN_RESUME_MS = 30_000L
         const val END_PERCENT = 95

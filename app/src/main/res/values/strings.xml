@@ -63,6 +63,8 @@
     <string name="live_tv">Live TV</string>
     <string name="movies">Movies</string>
     <string name="series">Series</string>
+    <string name="recent_movies">Recently added movies</string>
+    <string name="recent_series">Recently added series</string>
     <string name="settings">App Settings</string>
     
     <string name="loading">Loading…</string>

@@ -1,5 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Behind everything: the focused Recently added title's poster, faded in, darkened by a scrim. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <FrameLayout
+        android:id="@+id/backdrop_layer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0">
+
+        <ImageView
+            android:id="@+id/backdrop"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_home_scrim" />
+    </FrameLayout>
+
+<LinearLayout
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -91,6 +115,15 @@
                 android:text="@string/series" />
         </LinearLayout>
 
+        <!-- Recently added movies, then series (HomeScreen fills them). -->
+        <include
+            android:id="@+id/recent_movies"
+            layout="@layout/section_recent" />
+
+        <include
+            android:id="@+id/recent_series"
+            layout="@layout/section_recent" />
+
         <!-- Rows of 5: first the user's first app + Reload playlist, App Settings, All apps and
              System settings (always on the right); more apps in rows of 5 below. -->
         <LinearLayout
@@ -111,3 +144,4 @@
         android:paddingBottom="20dp"
         android:textSize="14sp" />
 </LinearLayout>
+</FrameLayout>
