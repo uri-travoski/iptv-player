@@ -16,6 +16,7 @@ import com.worldtv.iptvplayer.R
 import com.worldtv.iptvplayer.data.model.ContentType
 import com.worldtv.iptvplayer.data.repo.EntryRow
 import com.worldtv.iptvplayer.data.repo.Playlist
+import com.worldtv.iptvplayer.data.repo.Repository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -391,30 +392,37 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     // ---- Recently added ----
 
     /**
-     * Fills the Recently added rows from the database (quick, local). Posters come only from the
-     * home cache; they are downloaded once per playlist load: the first time Home shows after it.
+     * Fills the Recently added rows: English titles with a poster, from the database (quick,
+     * local), and of those only the ones whose poster is in the home cache (a broken link never
+     * shows as an empty box). Posters are downloaded once per playlist load: the first time Home
+     * shows after it; the rows then fill in.
      */
-    private suspend fun showRecent() {
+    private suspend fun showRecent(download: Boolean = true) {
         val p = graph.repo.playlist(graph.prefs.activePlaylist)
         recentPlaylist = p
         val names = graph.adultNames()
-        for (r in recents) {
-            val rows = if (p == null) emptyList() else graph.repo.recentlyAdded(p.id, r.type, names)
+        val candidates = recents.map { r ->
+            if (p == null) emptyList() else graph.repo.recentlyAdded(p.id, r.type, names, Repository.RECENT_SIZE + RECENT_SPARE)
+        }
+        val cached = HomePosters.cached(graph, candidates.flatten().mapNotNull { it.logo })
+        recents.forEachIndexed { i, r ->
+            val rows = candidates[i].filter { it.logo in cached }.take(Repository.RECENT_SIZE)
             r.adapter.submit(rows)
             r.view.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
         }
         if (!mobile) fitBigTiles(slotRows)
-        if (p == null) return
-        val stamp = "${p.id}:${p.lastSync}"
+        if (p == null || !download) return
+        // The rules version too: when the choice of titles changes in an update, their posters download.
+        val stamp = "${p.id}:${p.lastSync}:$RECENT_RULES"
         if (graph.prefs.homePostersFor == stamp || HomePosters.busy) return
-        val urls = recents.flatMap { r -> r.adapter.rows.mapNotNull { it.logo?.takeIf { u -> u.isNotBlank() } } }
+        val urls = candidates.flatten().mapNotNull { it.logo }
         val app = activity.applicationContext
         val g = graph
         g.appScope.launch {
             val got = HomePosters.prefetch(g, app, urls)
             // Nothing at all came (offline?): try again next time Home shows.
             if (got > 0 || urls.isEmpty()) g.prefs.homePostersFor = stamp
-            if (shown) recents.forEach { it.adapter.refreshImages() }
+            if (shown) scope.launch { showRecent(download = false) }
         }
     }
 
@@ -493,6 +501,10 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
 
     private companion object {
         const val COLUMNS = 5
+        /** Bumped when the choice of Recently added titles changes (2: English with a poster). */
+        const val RECENT_RULES = 2
+        /** Extra titles per row whose posters are downloaded, in case some links are broken. */
+        const val RECENT_SPARE = 10
         /** A Recently added row's height before it is laid out (dp). */
         const val RECENT_HEIGHT = 200
         const val CELL_HEIGHT = 80

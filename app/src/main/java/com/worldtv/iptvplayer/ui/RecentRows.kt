@@ -15,6 +15,10 @@ import com.worldtv.iptvplayer.AppGraph
 import com.worldtv.iptvplayer.R
 import com.worldtv.iptvplayer.data.repo.EntryRow
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 
 /**
  * Posters of Home's Recently added rows. Downloaded once per playlist load ([prefetch]) into
@@ -29,7 +33,7 @@ object HomePosters {
         private set
 
     /**
-     * Downloads [urls] into the home cache, one at a time (gentle on a weak box and on a stream
+     * Downloads [urls] into the home cache, two at a time (gentle on a weak box and on a stream
      * that may be starting). Decoded tiny and not kept in memory: only the file matters here.
      * Broken links are skipped. Returns how many came (or are already cached), once all were tried.
      */
@@ -38,23 +42,35 @@ object HomePosters {
         busy = true
         var got = 0
         try {
-            for (url in urls.distinct()) {
-                try {
-                    val result = graph.homeImages.execute(
-                        ImageRequest.Builder(context).data(url).size(32, 48)
-                            .memoryCachePolicy(CachePolicy.DISABLED).build(),
-                    )
-                    if (result is coil3.request.SuccessResult) got++
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // A broken poster link: the row shows the title's name instead.
+            for (pair in urls.distinct().chunked(2)) {
+                got += coroutineScope {
+                    pair.map { url ->
+                        async {
+                            try {
+                                val result = graph.homeImages.execute(
+                                    ImageRequest.Builder(context).data(url).size(32, 48)
+                                        .memoryCachePolicy(CachePolicy.DISABLED).build(),
+                                )
+                                if (result is coil3.request.SuccessResult) 1 else 0
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                0 // a broken poster link: that title is left out of the row
+                            }
+                        }
+                    }.awaitAll().sum()
                 }
             }
         } finally {
             busy = false
         }
         return got
+    }
+
+    /** Which of [urls] are in the home cache (read from disk, off the UI thread). */
+    suspend fun cached(graph: AppGraph, urls: List<String>): Set<String> = withContext(graph.io) {
+        val disk = graph.homeImages.diskCache ?: return@withContext emptySet()
+        urls.filterTo(HashSet()) { url -> disk.openSnapshot(url)?.use { true } ?: false }
     }
 
     /** [url] from the home cache into [view]; nothing (the name behind shows) if it isn't there. */
