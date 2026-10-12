@@ -137,6 +137,8 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             w.delete("hidden_item", "playlist_id = ?", args)
             w.delete("shown_category", "playlist_id = ?", args)
             w.delete("shown_item", "playlist_id = ?", args)
+            w.delete("live_watch", "playlist_id = ?", args)
+            w.delete("most_watched", "playlist_id = ?", args)
             w.delete("user_group_item", "group_id IN (SELECT id FROM user_group WHERE playlist_id = ?)", args)
             w.delete("user_group", "playlist_id = ?", args)
             w.delete("playlist", "id = ?", args)
@@ -572,6 +574,8 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         val (before, extra) = when {
             group != null -> "(SELECT g.added FROM user_group_item g WHERE g.group_id = $group AND g.item_id = e.item_id) < " +
                 "(SELECT g.added FROM user_group_item g WHERE g.group_id = $group AND g.item_id = ?)" to arrayOf(itemId)
+            key == KEY_MOST_WATCHED -> "$WATCH_RANK < (SELECT m.rank FROM most_watched m WHERE m.playlist_id = ? AND m.item_id = ?)" to
+                arrayOf(playlistId.toString(), itemId)
             key == KEY_FAV || sort == Sort.PROVIDER -> "e.sort < $pos" to emptyArray()
             sort == Sort.NAME -> "(e.name < ? COLLATE NOCASE OR (e.name = ? COLLATE NOCASE AND e.sort < $pos))" to arrayOf(name, name)
             sort == Sort.NAME_DESC -> "(e.name > ? COLLATE NOCASE OR (e.name = ? COLLATE NOCASE AND e.sort < $pos))" to arrayOf(name, name)
@@ -676,10 +680,97 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
 
     // ---- history and reset ----
 
-    /** Clear history: Continue watching of [types] in every playlist. Favourites and groups stay. */
+    /**
+     * Clear history: Continue watching of [types] in every playlist, and with Live TV the viewing
+     * behind Most watched. Favourites and groups stay.
+     */
     suspend fun clearHistory(types: Collection<ContentType>) = withContext(io) {
         if (types.isEmpty()) return@withContext
-        db.writableDatabase.delete("progress", "type IN (${types.joinToString(",") { it.ordinal.toString() }})", null)
+        val w = db.writableDatabase
+        w.delete("progress", "type IN (${types.joinToString(",") { it.ordinal.toString() }})", null)
+        if (ContentType.LIVE in types) {
+            w.delete("live_watch", null, null)
+            w.delete("most_watched", null, null)
+        }
+    }
+
+    // ---- Most watched (Live TV) ----
+
+    /** Stores one view of a channel (see MostWatched). Adult channels are never kept, even when shown by hand. */
+    suspend fun saveView(playlistId: Long, itemId: String, name: String, started: Long, watchedMs: Long, names: AdultNames) = withContext(io) {
+        if (isAdult(playlistId, ContentType.LIVE, itemId, names)) return@withContext
+        val v = ContentValues().apply {
+            put("playlist_id", playlistId)
+            put("item_id", itemId)
+            put("name", name)
+            put("started", started)
+            put("watched_ms", watchedMs)
+        }
+        db.writableDatabase.insertWithOnConflict("live_watch", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /** A view that ran past 4 hours (a box left on): it doesn't count. */
+    suspend fun deleteView(playlistId: Long, itemId: String, started: Long) = withContext(io) {
+        db.writableDatabase.delete(
+            "live_watch", "playlist_id = ? AND item_id = ? AND started = ?",
+            arrayOf(playlistId.toString(), itemId, started.toString()),
+        )
+    }
+
+    /** "Remove from Most watched": its views go, so it comes back only after 3 new ones. */
+    suspend fun forgetWatched(playlistId: Long, itemId: String) = withContext(io) {
+        val args = arrayOf(playlistId.toString(), itemId)
+        db.writableDatabase.delete("live_watch", "playlist_id = ? AND item_id = ?", args)
+        db.writableDatabase.delete("most_watched", "playlist_id = ? AND item_id = ?", args)
+    }
+
+    /**
+     * Works the Most watched list out again from the stored views (a few hundred rows at most).
+     * Run when Live TV opens. A channel whose id changed in a reload is found again by its name;
+     * hidden and adult channels are left out.
+     */
+    suspend fun refreshMostWatched(playlistId: Long, names: AdultNames, now: Long = System.currentTimeMillis()) = withContext(io) {
+        val w = db.writableDatabase
+        val pl = playlistId.toString()
+        w.delete("live_watch", "playlist_id = ? AND started < ?", arrayOf(pl, (now - MostWatched.KEEP_MS).toString()))
+        val views = ArrayList<MostWatched.View>()
+        val nameOf = HashMap<String, String>()
+        w.rawQuery("SELECT item_id, name, started, watched_ms FROM live_watch WHERE playlist_id = ?", arrayOf(pl)).use { c ->
+            while (c.moveToNext()) {
+                views += MostWatched.View(c.getString(0), c.getLong(2), c.getLong(3))
+                nameOf[c.getString(0)] = c.getString(1)
+            }
+        }
+        // Ids gone after a reload: the channel under the same name, if there is one.
+        val live = ContentType.LIVE.ordinal.toString()
+        val moved = HashMap<String, String>()
+        for ((id, name) in nameOf) {
+            val exists = w.rawQuery("SELECT 1 FROM entry WHERE playlist_id = ? AND type = ? AND item_id = ?", arrayOf(pl, live, id)).use { it.moveToFirst() }
+            if (exists) continue
+            val found = w.rawQuery(
+                "SELECT item_id FROM entry WHERE playlist_id = ? AND type = ? AND name = ? COLLATE NOCASE ORDER BY sort LIMIT 1",
+                arrayOf(pl, live, name),
+            ).use { if (it.moveToFirst()) it.getString(0) else null } ?: continue
+            w.execSQL("UPDATE OR IGNORE live_watch SET item_id = ? WHERE playlist_id = ? AND item_id = ?", arrayOf<Any>(found, playlistId, id))
+            moved[id] = found
+        }
+        val ranked = MostWatched.rank(views.map { if (it.itemId in moved) MostWatched.View(moved.getValue(it.itemId), it.started, it.watchedMs) else it }, now)
+        val (where, args) = filter(playlistId, ContentType.LIVE, KEY_ALL)
+        val list = ranked.asSequence()
+            .filter { id -> w.rawQuery("SELECT 1 FROM entry e $where AND e.item_id = ?", args + id).use { it.moveToFirst() } }
+            .filter { id -> !isAdult(playlistId, ContentType.LIVE, id, names) }
+            .take(MostWatched.SIZE)
+            .toList()
+        w.beginTransaction()
+        try {
+            w.delete("most_watched", "playlist_id = ?", arrayOf(pl))
+            list.forEachIndexed { i, id ->
+                w.execSQL("INSERT OR IGNORE INTO most_watched (playlist_id, item_id, rank) VALUES (?, ?, ?)", arrayOf<Any>(playlistId, id, i))
+            }
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
     }
 
     /** Reset app: every playlist and everything kept about it, as on a fresh install. */
@@ -848,6 +939,8 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
                 "WHERE f.playlist_id = e.playlist_id AND f.type = e.type AND f.item_id = e.item_id)") to base
             KEY_CONTINUE -> ("WHERE e.playlist_id = ? AND e.type = ? AND EXISTS(SELECT 1 FROM progress p " +
                 "WHERE p.playlist_id = e.playlist_id AND p.type = e.type AND p.item_id = e.item_id)") to base
+            KEY_MOST_WATCHED -> ("WHERE e.playlist_id = ? AND e.type = ? AND EXISTS(SELECT 1 FROM most_watched m " +
+                "WHERE m.playlist_id = e.playlist_id AND m.item_id = e.item_id)") to base
             else -> if (groupId(key) != null) {
                 ("WHERE e.playlist_id = ? AND e.type = ? AND EXISTS(SELECT 1 FROM user_group_item g " +
                     "WHERE g.group_id = ? AND g.item_id = e.item_id)") to (base + groupId(key).toString())
@@ -866,6 +959,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         key == KEY_CONTINUE -> "(SELECT p.updated FROM progress p WHERE p.playlist_id = e.playlist_id AND p.type = e.type " +
             "AND p.item_id = e.item_id) DESC"
         key == KEY_FAV -> "e.sort"
+        key == KEY_MOST_WATCHED -> WATCH_RANK
         groupId(key) != null -> "(SELECT g.added FROM user_group_item g WHERE g.group_id = ${groupId(key)} AND g.item_id = e.item_id)"
         else -> when (sort) {
             Sort.NEWEST -> "e.added DESC, e.sort"
@@ -905,6 +999,10 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         const val KEY_ALL = "\u0000all"
         const val KEY_FAV = "\u0000fav"
         const val KEY_CONTINUE = "\u0000continue"
+        /** Live TV's Most watched list (see MostWatched). */
+        const val KEY_MOST_WATCHED = "\u0000mostwatched"
+        /** A row's place in Most watched (0 = top). */
+        private const val WATCH_RANK = "(SELECT m.rank FROM most_watched m WHERE m.playlist_id = e.playlist_id AND m.item_id = e.item_id)"
         private const val SEARCH_PREFIX = "\u0000search:"
         private const val GROUP_PREFIX = "\u0000group:"
 
@@ -927,7 +1025,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
 
         private val RESET_TABLES = listOf(
             "entry", "category", "favourite", "progress", "hidden_category", "hidden_item", "shown_category", "shown_item",
-            "user_group_item", "user_group", "playlist",
+            "user_group_item", "user_group", "live_watch", "most_watched", "playlist",
         )
 
         const val MIN_RESUME_MS = 30_000L

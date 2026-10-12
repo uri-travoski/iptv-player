@@ -172,6 +172,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         activity.keepScreenOn(false)
         if (fullscreen) activity.setFullscreen(false)
         graph.player.removeListener(playerListener)
+        graph.watch.stop()
         graph.player.stop()
         handler.removeCallbacksAndMessages(null)
     }
@@ -255,10 +256,17 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         categoriesView.scrollToPosition(startIndex)
     }
 
-    /** "＋ Add group" on top, then the viewer's own groups (newest first), All, Favourites and the provider's. */
+    /**
+     * "＋ Add group" on top, then Most watched, the viewer's own groups (newest first), All,
+     * Favourites and the provider's.
+     */
     private suspend fun loadCategories() {
         val p = playlist ?: return
-        cats.all = listOf(CategoryRow(KEY_ADD_GROUP, activity.getString(R.string.group_add))) + graph.repo.categories(p.id, ContentType.LIVE)
+        graph.repo.refreshMostWatched(p.id, graph.adultNames())
+        cats.all = listOf(
+            CategoryRow(KEY_ADD_GROUP, activity.getString(R.string.group_add)),
+            CategoryRow(Repository.KEY_MOST_WATCHED, activity.getString(R.string.most_watched)),
+        ) + graph.repo.categories(p.id, ContentType.LIVE)
     }
 
     /** Position of [key] in the list, or of All when it isn't there. */
@@ -346,6 +354,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         val count = graph.repo.count(p.id, ContentType.LIVE, key)
         channelCount = count
         categoryTitle.text = "$name  ($count)"
+        (empty as? TextView)?.setText(if (key == Repository.KEY_MOST_WATCHED) R.string.most_watched_empty else R.string.no_channels)
         empty.visibility = if (count == 0) View.VISIBLE else View.GONE
         channelAdapter.reset(count) { offset, limit -> graph.repo.page(p.id, ContentType.LIVE, key, offset, limit, liveSort) }
         channelAdapter.playingItemId = playingRow?.itemId
@@ -397,6 +406,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         channelAdapter.playingItemId = row.itemId
         nowName.text = row.name
         graph.player.play(url)
+        playlist?.let { graph.watch.start(it.id, row.itemId, row.name) }
         graph.telemetry.event(
             "playback",
             "watch",
@@ -462,6 +472,10 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
             labels += activity.getString(if (fav) R.string.group_remove_from else R.string.group_add_to, activity.getString(R.string.favourites))
             groups.forEach { labels += activity.getString(if (it.id in inGroups) R.string.group_remove_from else R.string.group_add_to, it.name) }
             labels += activity.getString(R.string.group_new_with)
+            // In the Most watched list (not in full screen): take it out, last in the menu.
+            val forget = categoryKey == Repository.KEY_MOST_WATCHED && !fullscreen
+            if (forget) labels += activity.getString(R.string.most_watched_remove)
+            val newIndex = labels.size - 1 - (if (forget) 1 else 0)
             // In full screen the controls stay up while the menu is open.
             handler.removeCallbacks(hideBanner)
             android.app.AlertDialog.Builder(activity)
@@ -469,7 +483,12 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
                 .setItems(labels.toTypedArray()) { _, which ->
                     when (which) {
                         0 -> toggleFavourite(index, row)
-                        labels.size - 1 -> askGroupName(null, withChannel = row)
+                        newIndex -> askGroupName(null, withChannel = row)
+                        newIndex + 1 -> scope.launch {
+                            graph.repo.forgetWatched(p.id, row.itemId)
+                            activity.toast(activity.getString(R.string.most_watched_removed))
+                            selectCategory(categoryIndex)
+                        }
                         else -> {
                             val g = groups[which - 1]
                             val add = g.id !in inGroups

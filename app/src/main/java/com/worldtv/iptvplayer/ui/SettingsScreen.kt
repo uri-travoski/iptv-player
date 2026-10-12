@@ -306,7 +306,7 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
 
     // ---- Clear history ----
 
-    /** Continue watching and the last channel. Favourites and the viewer's own groups stay. */
+    /** Continue watching, the last channel and Most watched. Favourites and the viewer's own groups stay. */
     private fun clearHistory() {
         val labels = arrayOf(
             activity.getString(R.string.history_live),
@@ -323,7 +323,7 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
                         prefs.lastLiveItem = null
                         prefs.lastLiveCategory = null
                     }
-                    graph.repo.clearHistory(listOfNotNull(ContentType.MOVIE.takeIf { checked[1] }, ContentType.SERIES.takeIf { checked[2] }))
+                    graph.repo.clearHistory(listOfNotNull(ContentType.LIVE.takeIf { checked[0] }, ContentType.MOVIE.takeIf { checked[1] }, ContentType.SERIES.takeIf { checked[2] }))
                     activity.toast(activity.getString(R.string.history_cleared))
                 }
             }

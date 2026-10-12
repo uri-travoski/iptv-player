@@ -172,6 +172,10 @@ class AppGraph(private val app: Application) {
     /** True while a playlist is being downloaded (manual Reload or automatic refresh). */
     @Volatile var syncing = false
     val player: PlayerController by lazy { PlayerController(app, http, telemetry) }
+    /** Live TV viewing time, for Most watched. */
+    val watch: com.worldtv.iptvplayer.player.WatchTracker by lazy {
+        com.worldtv.iptvplayer.player.WatchTracker(player.player, appScope, repo) { adultNames() }
+    }
     val prefs: Prefs by lazy { Prefs(app.getSharedPreferences("app", Context.MODE_PRIVATE)) }
 
     /** The admin's adult word lists, compiled; rebuilt only when they change. */
@@ -333,9 +337,9 @@ class Prefs(private val sp: SharedPreferences) {
             ?.takeIf { it == Sort.NAME || it == Sort.NAME_DESC } ?: Sort.PROVIDER
         set(v) = sp.edit().putString("live_sort", v.name).apply()
 
-    /** Settings > Automatic refresh: AutoRefresh.EVERY_START, DAILY or EVERY_2_DAYS (default). */
+    /** Settings > Automatic refresh: AutoRefresh.EVERY_START, DAILY (default) or EVERY_2_DAYS. */
     var autoRefresh: String
-        get() = sp.getString("auto_refresh", null)?.takeIf { it in AutoRefresh.MODES } ?: AutoRefresh.EVERY_2_DAYS
+        get() = sp.getString("auto_refresh", null)?.takeIf { it in AutoRefresh.MODES } ?: AutoRefresh.DAILY
         set(v) = sp.edit().putString("auto_refresh", v).apply()
 
     // ---- subtitles (Settings > Subtitle settings) ----

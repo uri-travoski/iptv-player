@@ -78,6 +78,11 @@
     <string name="group_save">Save</string>
     <string name="group_created">Group “%1$s” created · Menu (long-press) on a channel adds it</string>
     <string name="group_new_with">＋ New group…</string>
+    <!-- Live TV: channels watched most (5 min+ views, 3 in 30 days) -->
+    <string name="most_watched">Most watched</string>
+    <string name="most_watched_empty">Channels you watch often appear here: watch a channel for 5 minutes or more on 3 different occasions.</string>
+    <string name="most_watched_remove">Remove from Most watched</string>
+    <string name="most_watched_removed">Removed from Most watched</string>
     <string name="group_add_to">Add to %1$s</string>
     <string name="group_remove_from">Remove from %1$s</string>
     <string name="group_added">Added to %1$s</string>
@@ -232,13 +237,13 @@
     <string name="refresh_daily">Every day</string>
     <string name="refresh_2_days">Every 2 days</string>
     <string name="refresh_every_start_long">Update live, movies &amp; series every time WorldTV starts</string>
-    <string name="refresh_daily_long">Update live, movies &amp; series every day</string>
-    <string name="refresh_2_days_long">Update live, movies &amp; series every 2 days (recommended)</string>
+    <string name="refresh_daily_long">Update live, movies &amp; series every day (recommended)</string>
+    <string name="refresh_2_days_long">Update live, movies &amp; series every 2 days</string>
     <string name="auto_refreshing">Updating the playlist automatically…</string>
     <string name="auto_refresh_done">Playlist updated automatically</string>
 
     <string name="history_title">Clear history</string>
-    <string name="history_live">Live TV: last channel watched</string>
+    <string name="history_live">Live TV: last channel watched and Most watched</string>
     <string name="history_movies">Movies: Continue watching</string>
     <string name="history_series">Series: Continue watching</string>
     <string name="history_clear">Clear</string>
@@ -272,8 +277,8 @@
     <string name="subs_failed">Couldn\'t get subtitles</string>
 
     <string name="trailer">Trailer</string>
-    <string name="vod_fav_add">Favourite</string>
-    <string name="vod_fav_remove">Unfavourite</string>
+    <string name="vod_fav_add">☆ Favourite</string>
+    <string name="vod_fav_remove">★ Favourite</string>
     <string name="trailer_no_app">YouTube isn\'t installed on this box</string>
     <string name="date_added">Added: %1$s</string>
 
