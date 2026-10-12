@@ -21,9 +21,7 @@ import com.worldtv.iptvplayer.Prefs
 import com.worldtv.iptvplayer.R
 import com.worldtv.iptvplayer.data.model.ContentType
 import com.worldtv.iptvplayer.data.net.AppDns
-import com.worldtv.iptvplayer.data.repo.Playlist
 import com.worldtv.iptvplayer.data.repo.Sort
-import com.worldtv.iptvplayer.data.sync.Demo
 import com.worldtv.iptvplayer.data.online.OnlineAccount
 import com.worldtv.iptvplayer.data.online.OnlineService
 import com.worldtv.iptvplayer.player.SubtitleStyle
@@ -538,9 +536,15 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
                     // Everything else in the cache (downloaded subtitles, update files).
                     app.cacheDir.listFiles()?.filter { it.name != "images" && it.name != AppGraph.HOME_IMAGES_DIR }?.forEach { it.deleteRecursively() }
                 }
-                val id = graph.repo.addPlaylist(Demo.NAME, Playlist.KIND_DEMO, "demo", null, null)
-                graph.repo.playlist(id)?.let { graph.syncer.sync(it) {} }
-                prefs.activePlaylist = id
+                val id = graph.addDefaultPlaylist()
+                // Offline: it stays, and loads by itself later (automatic refresh).
+                try {
+                    graph.repo.playlist(id)?.let { graph.syncer.sync(it) {} }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    android.util.Log.w("WorldTV", "default playlist not loaded", e)
+                }
                 SubtitleStyle.apply(app.playerView, prefs)
                 graph.player.applySubtitlePrefs(prefs.subsEnabled, prefs.subsLanguage)
                 app.playerView.resizeMode = prefs.resizeMode
