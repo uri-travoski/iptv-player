@@ -324,7 +324,9 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         busy.visibility = View.VISIBLE
         reloadStatus.setTextColor(activity.getColor(R.color.text_secondary))
         reloadStatus.setText(if (auto) R.string.auto_refreshing else R.string.reloading)
-        scope.launch {
+        // App-wide, not this screen's: a rebuilt UI (e.g. a phone turning to landscape for the
+        // TV layout) must not cut a load off half-way.
+        graph.appScope.launch {
             try {
                 val p = graph.repo.playlist(graph.prefs.activePlaylist)
                 if (p == null) {

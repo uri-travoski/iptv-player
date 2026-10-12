@@ -178,6 +178,23 @@ class AppGraph(private val app: Application) {
     }
     val prefs: Prefs by lazy { Prefs(app.getSharedPreferences("app", Context.MODE_PRIVATE)) }
 
+    /**
+     * Adds the default playlist (Free TV) and makes it active. Not loaded here: Home's
+     * automatic refresh loads it in the background (it has never been loaded), or the caller does.
+     */
+    suspend fun addDefaultPlaylist(): Long {
+        val id = repo.addPlaylist(
+            com.worldtv.iptvplayer.data.sync.DefaultPlaylist.NAME,
+            com.worldtv.iptvplayer.data.repo.Playlist.KIND_M3U,
+            com.worldtv.iptvplayer.data.sync.DefaultPlaylist.URL,
+            null,
+            null,
+        )
+        prefs.activePlaylist = id
+        prefs.defaultPlaylistAdded = true
+        return id
+    }
+
     /** The admin's adult word lists, compiled; rebuilt only when they change. */
     fun adultNames(): AdultNames {
         val cats = prefs.adultCategoryWords
@@ -223,6 +240,11 @@ class Prefs(private val sp: SharedPreferences) {
     var deviceId: String?
         get() = sp.getString("device_id", null)
         set(v) = sp.edit().putString("device_id", v).apply()
+
+    /** True once the default playlist (Free TV) was added, so deleting it doesn't bring it back. */
+    var defaultPlaylistAdded: Boolean
+        get() = sp.getBoolean("default_playlist_added", false)
+        set(v) = sp.edit().putBoolean("default_playlist_added", v).apply()
 
     var activePlaylist: Long
         get() = sp.getLong("active_playlist", -1)
