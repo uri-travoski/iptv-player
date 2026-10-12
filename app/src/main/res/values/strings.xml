@@ -10,7 +10,7 @@
     <string name="hint_password">Password</string>
     <string name="hint_m3u">M3U playlist URL</string>
     <string name="save_and_load">Save and load</string>
-    <string name="first_run_notice">Load your own playlist. This app does not include any channels or content.</string>
+    <string name="first_run_notice">Load your own playlist. Apart from the Free TV list of free-to-air channels, WorldTV includes no channels or content.</string>
 
     <string name="playlists">Playlists</string>
     <string name="playlist_actions">Playlist</string>
@@ -278,9 +278,9 @@
     <string name="date_added">Added: %1$s</string>
 
     <string name="reset_title">Reset app?</string>
-    <string name="reset_message">This removes every playlist, your groups and favourites, history, hidden categories, live sorting and all settings, and empties the cache, as if WorldTV were just installed. A sample playlist is then added so you can see how everything looks. This can\'t be undone. The active playlist\'s PIN is asked next.</string>
+    <string name="reset_message">This removes every playlist, your groups and favourites, history, hidden categories, live sorting and all settings, and empties the cache, as if WorldTV were just installed. The Free TV playlist (free-to-air channels) is then added again. This can\'t be undone. The active playlist\'s PIN is asked next.</string>
     <string name="reset_confirm">Reset</string>
-    <string name="reset_done">WorldTV was reset. A sample playlist was added.</string>
+    <string name="reset_done">WorldTV was reset. The Free TV playlist was added.</string>
     <string name="reset_failed">Reset failed: %1$s</string>
 
     <!-- Online accounts (TMDB, OpenSubtitles): several each, tried in turn -->

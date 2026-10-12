@@ -111,13 +111,19 @@ class MainActivity : ComponentActivity() {
         val graph = App.graph
         // First launch: one tick accepts Terms, Privacy and diagnostics (opt-in by default).
         com.worldtv.iptvplayer.ui.AgreementDialog.showIfNeeded(this)
-        val playlists = graph.repo.playlists()
+        var playlists = graph.repo.playlists()
         if (graph.prefs.uiMode == null) {
             // Updated from a version without the choice: those installs are all TV boxes.
             if (playlists.isNotEmpty()) graph.prefs.uiMode = Prefs.UI_TV
             else return resetTo(UiModeScreen(this))
         }
         setFullscreen(false)
+        // A new install starts with Free TV, loaded in the background by Home. Only once:
+        // someone who deletes every playlist gets the add screen instead.
+        if (playlists.isEmpty() && !graph.prefs.defaultPlaylistAdded) {
+            graph.addDefaultPlaylist()
+            playlists = graph.repo.playlists()
+        }
         val active = playlists.firstOrNull { it.id == graph.prefs.activePlaylist }
         push(HomeScreen(this))
         when {
