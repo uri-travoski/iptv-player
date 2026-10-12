@@ -14,10 +14,7 @@
 
     <string name="playlists">Playlists</string>
     <string name="playlist_actions">Playlist</string>
-    <string name="action_open">Open</string>
-    <string name="action_refresh">Refresh</string>
     <string name="action_delete">Delete</string>
-    <string name="action_details">Details</string>
     <string name="action_categories">Categories (show / hide)</string>
     <string name="categories_title">Categories · %1$s</string>
     <string name="categories_hint">OK: show or hide a category · Menu or long-press: show or hide single channels in it. Show all goes back to the defaults: adult ones stay hidden (select one to show it). Hidden items are left out everywhere, including All, Favourites and search.</string>
@@ -48,17 +45,13 @@
     <string name="adult_words_restored">Default words restored</string>
     <string name="adult_words_applying">Updating hidden channels in all playlists…</string>
     <string name="adult_words_applied">Hidden channels updated</string>
-    <string name="categories_need_pin">Set a PIN first, so only you can change which categories are shown</string>
     <string name="hint_pin">6-digit PIN (leave empty for 000000)</string>
     <string name="pin_enter">PIN for %1$s</string>
     <string name="pin_new">New 6-digit PIN</string>
     <string name="pin_wrong">Wrong PIN</string>
     <string name="pin_locked">Too many wrong PINs. Try again in %1$d s</string>
-    <string name="pin_set">Set PIN</string>
-    <string name="pin_change">Change PIN</string>
     <string name="pin_remove">Reset to 000000</string>
     <string name="pin_saved">PIN saved</string>
-    <string name="pin_removed">PIN reset to 000000</string>
 
     <string name="live_tv">Live TV</string>
     <string name="movies">Movies</string>
@@ -188,6 +181,21 @@
     <string name="update_allow_install">Allow WorldTV to install apps, then press Back: the update continues.</string>
     <string name="update_failed">Update failed: %1$s</string>
 
+    <string name="first_load_title">Please wait while a free demo IPTV playlist is loaded…</string>
+    <string name="first_load_failed">The free demo playlist could not be loaded: %1$s</string>
+    <string name="first_load_retry">Try again</string>
+    <string name="first_load_own">Add my own playlist</string>
+    <string name="first_load_paid">This demo has free-to-air channels only. A paid IPTV subscription can offer a lot more entertainment: thousands of live channels, sports, movies and series. Add yours any time in App Settings › Add playlist.</string>
+    <string name="live_order_title">Live channel order</string>
+    <string name="live_order_hint_categories">Choose a category to put its channels in your own order. Live TV then shows them that way (also in All).</string>
+    <string name="live_order_hint">OK (tap) on a channel picks it up (⇅). Up / Down move it; OK again puts it down. Or use the buttons. Saved at once; reloads keep it.</string>
+    <string name="order_top">Top</string>
+    <string name="order_up">▲ Up</string>
+    <string name="order_down">▼ Down</string>
+    <string name="order_bottom">Bottom</string>
+    <string name="order_reset">Provider order</string>
+    <string name="order_reset_done">Back to the provider\'s order</string>
+    <string name="order_pick_first">First pick a channel (OK on it)</string>
     <string name="ui_mode_title">How will you use WorldTV?</string>
     <string name="ui_mode_note">You can change this later in App Settings.</string>
     <string name="ui_mode_tv">TV</string>
@@ -196,8 +204,15 @@
     <string name="ui_mode_mobile_hint">Phone or tablet, with touch</string>
     <string name="ui_mode_setting_tv">Layout: TV (OK to switch to Mobile)</string>
     <string name="ui_mode_setting_mobile">Layout: Mobile (tap to switch to TV)</string>
-    <string name="playlists_hint_tv">OK to open · Menu or long-press for refresh and delete</string>
-    <string name="playlists_hint_mobile">Tap to open · Long-press for refresh and delete</string>
+    <string name="playlists_hint_tv">OK on a playlist: Load, Reload, Edit or Delete</string>
+    <string name="playlists_hint_mobile">Tap a playlist: Load, Reload, Edit or Delete</string>
+    <string name="action_load">Load playlist</string>
+    <string name="action_reload">Reload channels / playlist</string>
+    <string name="action_edit">Edit</string>
+    <string name="edit_playlist">Edit playlist</string>
+    <string name="hint_pin_keep">New 6-digit PIN (leave empty to keep the current one)</string>
+    <string name="playlist_saved">%1$s saved and reloaded</string>
+    <string name="pin_note">The PIN is set when you add a playlist (Edit changes it). Default: 000000.</string>
 
     <!-- v2.01: Settings tiles -->
     <string name="set_playlists">Playlists</string>
@@ -215,9 +230,10 @@
     <string name="set_home_is">WorldTV ✓</string>
     <string name="set_home_make">Not set (OK to set)</string>
     <string name="set_dns">DNS</string>
-    <string name="set_dns_system">Box default</string>
-    <string name="set_dns_cloudflare">Cloudflare (encrypted)</string>
-    <string name="set_dns_google">Google (encrypted)</string>
+    <string name="set_dns_system">Off (box default)</string>
+    <string name="set_dns_both">1.1.1.1 + 8.8.8.8 (encrypted)</string>
+    <string name="set_dns_cloudflare">1.1.1.1 only (Cloudflare, encrypted)</string>
+    <string name="set_dns_google">8.8.8.8 only (Google, encrypted)</string>
     <string name="set_auto_update">Check for updates on start</string>
     <string name="set_reset">Reset app</string>
 
@@ -225,14 +241,8 @@
     <string name="show_hide">(show/hide)</string>
     <string name="sort_name_desc">Sort: Z–A</string>
 
-    <string name="live_sort_title">Live channel sort</string>
-    <string name="live_sort_default">Default</string>
-    <string name="live_sort_az">A–Z</string>
-    <string name="live_sort_za">Z–A</string>
-    <string name="live_sort_reset">Reset sorting</string>
-    <string name="live_sort_was_reset">Live channels are back in the provider\'s order</string>
 
-    <string name="auto_refresh_title">Automatic refresh</string>
+    <string name="auto_refresh_title">Playlist Auto Reload</string>
     <string name="refresh_every_start">Every start</string>
     <string name="refresh_daily">Every day</string>
     <string name="refresh_2_days">Every 2 days</string>
@@ -329,7 +339,4 @@
     <string name="agreement_body">By continuing you accept the Terms of Use, Privacy Policy and the app collects diagnostic data for troubleshooting.</string>
     <string name="agreement_accept">I agree</string>
     <string name="agreement_continue">Continue</string>
-    <string name="set_diagnostics">Send diagnostics</string>
-    <string name="set_diagnostics_on">Send diagnostics: on</string>
-    <string name="set_diagnostics_off">Send diagnostics: off</string>
 </resources>

@@ -8,13 +8,12 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.worldtv.iptvplayer.MainActivity
 import com.worldtv.iptvplayer.R
-import com.worldtv.iptvplayer.data.repo.Pin
 import com.worldtv.iptvplayer.data.repo.Playlist
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Settings > Playlists: the saved playlists (open, refresh, details, categories, delete) and Add playlist. */
+/** Settings > Playlists: the saved playlists (OK: Load, Reload, Edit, Delete) and Add playlist. */
 class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
 
     override val root: View = inflater.inflate(R.layout.screen_playlists, null)
@@ -26,7 +25,7 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
 
     init {
         fullWidthOnMobile(R.id.form)
-        if (graph.prefs.isMobile) root.findViewById<TextView>(R.id.playlists_hint).setText(R.string.playlists_hint_mobile)
+        root.findViewById<TextView>(R.id.playlists_hint).setText(if (graph.prefs.isMobile) R.string.playlists_hint_mobile else R.string.playlists_hint_tv)
         add.setOnClickListener { activity.push(AddPlaylistScreen(activity)) }
     }
 
@@ -57,7 +56,7 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
         }
         val lock = if (p.hasPin) "  ·  PIN" else ""
         v.text = if (active) "${p.name}  ·  $kind$lock  ·  active" else "${p.name}  ·  $kind$lock"
-        v.setOnClickListener { open(p) }
+        v.setOnClickListener { actions(p) }
         v.setOnLongClickListener { actions(p); true }
         v.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_MENU && event.action == KeyEvent.ACTION_DOWN) {
@@ -78,13 +77,13 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
         activity.resetTo(HomeScreen(activity))
     }
 
+    /** OK, tap, Menu or long-press on a playlist. Edit and Delete ask for the PIN. */
     private fun actions(p: Playlist) {
         if (busy) return
         val labels = arrayOf(
-            activity.getString(R.string.action_open),
-            activity.getString(R.string.action_refresh),
-            activity.getString(R.string.action_details),
-            activity.getString(R.string.action_categories),
+            activity.getString(R.string.action_load),
+            activity.getString(R.string.action_reload),
+            activity.getString(R.string.action_edit),
             activity.getString(R.string.action_delete),
         )
         AlertDialog.Builder(activity)
@@ -93,9 +92,8 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
                 when (which) {
                     0 -> open(p)
                     1 -> refresh(p)
-                    2 -> PinPrompt.require(activity, p) { details(p) }
-                    3 -> manageCategories(p)
-                    4 -> PinPrompt.require(activity, p) { delete(p) }
+                    2 -> PinPrompt.require(activity, p) { activity.push(AddPlaylistScreen(activity, edit = p)) }
+                    3 -> PinPrompt.require(activity, p) { delete(p) }
                 }
             }
             .show()
@@ -119,51 +117,6 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
                 busy = false
                 activity.keepScreenOn(false)
                 busyDots.visibility = View.GONE
-            }
-        }
-    }
-
-    /**
-     * Which categories are shown: behind the playlist's PIN, so viewers can't change it. A
-     * playlist without a PIN gets one set first; otherwise anyone could undo the choice.
-     */
-    private fun manageCategories(p: Playlist) {
-        if (p.hasPin) {
-            PinPrompt.require(activity, p) { activity.push(CategoriesScreen(activity, p)) }
-            return
-        }
-        activity.toast(activity.getString(R.string.categories_need_pin))
-        PinPrompt.askNew(activity, canRemove = false) { pin ->
-            if (pin == null) return@askNew
-            scope.launch {
-                graph.repo.setPin(p.id, Pin.hash(pin))
-                activity.toast(activity.getString(R.string.pin_saved))
-                activity.push(CategoriesScreen(activity, graph.repo.playlist(p.id) ?: p))
-            }
-        }
-    }
-
-    /** Server, login and URL. Reached only through [PinPrompt] when the playlist has a PIN. */
-    private fun details(p: Playlist) {
-        val lines = if (p.isXtream) {
-            listOf("Type: Xtream Codes", "Server: ${p.url}", "Username: ${p.username.orEmpty()}", "Password: ${p.password.orEmpty()}")
-        } else {
-            listOf("Type: M3U", "URL: ${p.url}")
-        }
-        AlertDialog.Builder(activity)
-            .setTitle(p.name)
-            .setMessage(lines.joinToString("\n"))
-            .setPositiveButton(android.R.string.ok, null)
-            .setNeutralButton(if (p.hasPin) R.string.pin_change else R.string.pin_set) { _, _ -> changePin(p) }
-            .show()
-    }
-
-    private fun changePin(p: Playlist) {
-        PinPrompt.askNew(activity, canRemove = p.hasPin) { pin ->
-            scope.launch {
-                graph.repo.setPin(p.id, pin?.let { Pin.hash(it) })
-                activity.toast(activity.getString(if (pin == null) R.string.pin_removed else R.string.pin_saved))
-                reload()
             }
         }
     }

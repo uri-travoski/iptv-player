@@ -42,13 +42,12 @@ object AgreementDialog {
             .setTitle(R.string.agreement_title)
             .setView(box)
             .setCancelable(false)
-            .setPositiveButton(R.string.agreement_continue) { _, _ ->
-                prefs.telemetryEnabled = check.isChecked
-                prefs.telemetryAgreed = true
-            }
+            .setPositiveButton(R.string.agreement_continue) { _, _ -> prefs.telemetryAgreed = true }
             .create()
         dialog.setCanceledOnTouchOutside(false)
         dialog.show()
+        // Diagnostics are part of the terms (always on): Continue only with "I agree" ticked.
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.let { cont -> check.setOnCheckedChangeListener { _, on -> cont.isEnabled = on } }
         // Shown before TV or Mobile is picked, so a phone is told apart by its screen size.
         val phone = activity.resources.configuration.smallestScreenWidthDp < 600
         // TV: compact, a third of the screen wide. Phone: a third is a sliver, so nearly full width.

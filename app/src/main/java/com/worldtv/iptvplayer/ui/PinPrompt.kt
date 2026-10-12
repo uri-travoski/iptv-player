@@ -33,7 +33,7 @@ object PinPrompt {
             activity.toast(activity.getString(R.string.pin_locked, (waitMs + 999) / 1000))
             return
         }
-        ask(activity, activity.getString(R.string.pin_enter, playlist.name)) { pin, dialog ->
+        ask(activity, activity.getString(R.string.pin_enter, playlist.name), note = activity.getString(R.string.pin_note)) { pin, dialog ->
             if (Pin.matches(pin, stored)) {
                 wrong = 0
                 dialog.dismiss()
@@ -64,6 +64,7 @@ object PinPrompt {
         activity: MainActivity,
         title: String,
         extra: Pair<String, () -> Unit>? = null,
+        note: String? = null,
         onSix: (String, AlertDialog) -> Unit,
     ) {
         val input = EditText(activity).apply {
@@ -81,6 +82,7 @@ object PinPrompt {
         }
         val dialog = AlertDialog.Builder(activity)
             .setTitle(title)
+            .apply { note?.let { setMessage(it) } }
             .setView(box)
             .setNegativeButton(android.R.string.cancel, null)
             .apply { extra?.let { (label, action) -> setPositiveButton(label) { _, _ -> action() } } }

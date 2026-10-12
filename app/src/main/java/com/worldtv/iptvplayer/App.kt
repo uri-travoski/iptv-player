@@ -33,6 +33,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okio.Path.Companion.toOkioPath
@@ -197,6 +198,37 @@ class AppGraph(private val app: Application) {
         return id
     }
 
+    /** First start: the default playlist's first load, shown by FirstLoadScreen. Null when none ran. */
+    @Volatile
+    var firstLoad: kotlinx.coroutines.Deferred<Unit>? = null
+        private set
+
+    /** Progress lines of [firstLoad] ("Downloading playlist…", "Entries: 2000"). */
+    val firstLoadProgress = kotlinx.coroutines.flow.MutableStateFlow("")
+
+    /** True once FirstLoadScreen is done with (loaded, or left after a failure): not shown again. */
+    @Volatile
+    var firstLoadShown = false
+
+    /**
+     * Loads the active (default) playlist for the first time, app-wide: a rebuilt UI (the TV /
+     * Mobile choice, a phone turning) doesn't stop it. Running already: that same load.
+     */
+    fun startFirstLoad(): kotlinx.coroutines.Deferred<Unit> {
+        firstLoad?.takeIf { it.isActive }?.let { return it }
+        firstLoadProgress.value = ""
+        return appScope.async {
+            syncing = true
+            try {
+                val p = repo.playlist(prefs.activePlaylist) ?: error("no playlist")
+                syncer.sync(p) { firstLoadProgress.value = it }
+                autoRefreshedThisRun += p.id
+            } finally {
+                syncing = false
+            }
+        }.also { firstLoad = it }
+    }
+
     /** The admin's adult word lists, compiled; rebuilt only when they change. */
     fun adultNames(): AdultNames {
         val cats = prefs.adultCategoryWords
@@ -228,10 +260,9 @@ class Prefs(private val sp: SharedPreferences) {
 
     val isMobile: Boolean get() = uiMode == UI_MOBILE
 
-    /** Send diagnostics to the telemetry database. On by default; the first-run dialog sets it. */
-    var telemetryEnabled: Boolean
-        get() = sp.getBoolean("telemetry_enabled", true)
-        set(v) = sp.edit().putBoolean("telemetry_enabled", v).apply()
+    /** Send diagnostics to the telemetry database: always (accepting the terms on first start includes it). */
+    val telemetryEnabled: Boolean
+        get() = true
 
     /** True once the Terms / Privacy / diagnostics notice has been accepted. */
     var telemetryAgreed: Boolean
@@ -312,7 +343,7 @@ class Prefs(private val sp: SharedPreferences) {
 
     /** AppDns.MODE_*: which DNS the app's own connections use. */
     var dnsMode: Int
-        get() = sp.getInt("dns_mode", AppDns.MODE_SYSTEM)
+        get() = sp.getInt("dns_mode", AppDns.MODE_BOTH)
         set(v) = sp.edit().putInt("dns_mode", v).apply()
 
     /** Words that hide a category (App Settings > playlist > Categories > Adult words). */
@@ -353,13 +384,11 @@ class Prefs(private val sp: SharedPreferences) {
         set(v) = sp.edit().putInt("resize_mode", v).apply()
 
     /**
-     * Live channel order (Settings > Live channel sort): Sort.PROVIDER (the provider's order),
-     * NAME (A–Z) or NAME_DESC (Z–A). A setting, not part of the playlist: reloads keep it.
+     * Live channel order: the provider's, with any channels moved by hand (Settings > Live
+     * channel order, stored per playlist). A–Z / Z–A are gone.
      */
-    var liveSort: Sort
-        get() = sp.getString("live_sort", null)?.let { s -> Sort.values().firstOrNull { it.name == s } }
-            ?.takeIf { it == Sort.NAME || it == Sort.NAME_DESC } ?: Sort.PROVIDER
-        set(v) = sp.edit().putString("live_sort", v.name).apply()
+    val liveSort: Sort
+        get() = Sort.PROVIDER
 
     /** Settings > Automatic refresh: AutoRefresh.EVERY_START, DAILY (default) or EVERY_2_DAYS. */
     var autoRefresh: String

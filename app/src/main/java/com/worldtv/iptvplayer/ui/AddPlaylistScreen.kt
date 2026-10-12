@@ -11,8 +11,15 @@ import com.worldtv.iptvplayer.data.source.XtreamCredentials
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** Add an Xtream login or an M3U URL, check it, and load it. */
-class AddPlaylistScreen(activity: MainActivity, private val firstRun: Boolean = false) : Screen(activity) {
+/**
+ * Add an Xtream login or an M3U URL, check it, and load it. With [edit]: that playlist's
+ * details to change (an empty PIN keeps the current one); saved, then loaded again.
+ */
+class AddPlaylistScreen(
+    activity: MainActivity,
+    private val firstRun: Boolean = false,
+    private val edit: Playlist? = null,
+) : Screen(activity) {
 
     override val root: View = inflater.inflate(R.layout.screen_add_playlist, null)
 
@@ -38,6 +45,19 @@ class AddPlaylistScreen(activity: MainActivity, private val firstRun: Boolean = 
         save.setOnClickListener { submit() }
         if (firstRun) message.setText(R.string.first_run_notice)
         setMode(true)
+        if (edit != null) {
+            root.findViewById<TextView>(R.id.title).setText(R.string.edit_playlist)
+            name.setText(edit.name)
+            pin.setHint(R.string.hint_pin_keep)
+            if (edit.isXtream) {
+                server.setText(edit.url)
+                username.setText(edit.username.orEmpty())
+                password.setText(edit.password.orEmpty())
+            } else {
+                m3uUrl.setText(edit.url)
+                setMode(false)
+            }
+        }
     }
 
     override fun onShown() {
@@ -69,6 +89,7 @@ class AddPlaylistScreen(activity: MainActivity, private val firstRun: Boolean = 
         val pinText = pin.text.toString().trim()
         if (pinText.isNotEmpty() && !Pin.isValid(pinText)) return showError("The PIN must be exactly 6 digits.")
         val pinHash = if (pinText.isEmpty()) null else Pin.hash(pinText)
+        val editing = edit
 
         if (!useXtream) {
             if (m3u.isEmpty()) return showError("Enter the M3U URL.")
@@ -100,6 +121,22 @@ class AddPlaylistScreen(activity: MainActivity, private val firstRun: Boolean = 
             var createdId = -1L
             try {
                 val repo = graph.repo
+                if (editing != null) {
+                    // Checked first, so a mistyped login doesn't replace a working one.
+                    if (useXtream) {
+                        val creds = XtreamCredentials(serverUrl, user, pass)
+                        progress("Signing in…")
+                        graph.syncer.login(creds)
+                        repo.updatePlaylist(editing.id, title, Playlist.KIND_XTREAM, creds.baseUrl, user, pass, pinHash)
+                    } else {
+                        repo.updatePlaylist(editing.id, title, Playlist.KIND_M3U, m3u, null, null, pinHash)
+                    }
+                    val saved = repo.playlist(editing.id) ?: error("Playlist not saved")
+                    graph.syncer.sync(saved, progress)
+                    activity.toast(activity.getString(R.string.playlist_saved, saved.name))
+                    activity.pop()
+                    return@launch
+                }
                 if (useXtream) {
                     val creds = XtreamCredentials(serverUrl, user, pass)
                     progress("Signing in…")

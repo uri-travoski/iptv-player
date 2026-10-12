@@ -28,6 +28,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
+import com.worldtv.iptvplayer.data.sync.DefaultPlaylist
 import com.worldtv.iptvplayer.data.source.AdultNames
 import com.worldtv.iptvplayer.ui.AddPlaylistScreen
 import com.worldtv.iptvplayer.ui.HomeScreen
@@ -112,20 +113,34 @@ class MainActivity : ComponentActivity() {
         // First launch: one tick accepts Terms, Privacy and diagnostics (opt-in by default).
         com.worldtv.iptvplayer.ui.AgreementDialog.showIfNeeded(this)
         var playlists = graph.repo.playlists()
+        // A new install starts with Free TV, the free demo playlist: added and loading from right
+        // after the terms, while the TV / Mobile choice is made. Only once: someone who deletes
+        // every playlist gets the add screen instead.
+        if (playlists.isEmpty() && !graph.prefs.defaultPlaylistAdded) {
+            graph.addDefaultPlaylist()
+            graph.startFirstLoad()
+        } else if (graph.firstLoad == null && !graph.firstLoadShown) {
+            // Restarted before that first load finished: carry on with it (and its "please wait").
+            val active = playlists.firstOrNull { it.id == graph.prefs.activePlaylist }
+            if (active != null && active.url == DefaultPlaylist.URL && active.lastSync <= 0) graph.startFirstLoad()
+        }
         if (graph.prefs.uiMode == null) {
-            // Updated from a version without the choice: those installs are all TV boxes.
-            if (playlists.isNotEmpty()) graph.prefs.uiMode = Prefs.UI_TV
+            // Updated from a version without the choice: those installs are all TV boxes. (Not
+            // the demo playlist added a moment ago: the UI may have been rebuilt since.)
+            if (playlists.isNotEmpty() && !graph.prefs.defaultPlaylistAdded) graph.prefs.uiMode = Prefs.UI_TV
             else return resetTo(UiModeScreen(this))
         }
         setFullscreen(false)
-        // A new install starts with Free TV, loaded in the background by Home. Only once:
-        // someone who deletes every playlist gets the add screen instead.
-        if (playlists.isEmpty() && !graph.prefs.defaultPlaylistAdded) {
-            graph.addDefaultPlaylist()
-            playlists = graph.repo.playlists()
-        }
+        playlists = graph.repo.playlists()
         val active = playlists.firstOrNull { it.id == graph.prefs.activePlaylist }
         push(HomeScreen(this))
+        // First start: "please wait" over Home until the demo playlist has loaded (not when it
+        // already has, e.g. while the TV / Mobile choice was made).
+        val firstLoad = graph.firstLoad
+        if (firstLoad != null && !graph.firstLoadShown) {
+            if (firstLoad.isCompleted && !firstLoad.isCancelled) graph.firstLoadShown = true
+            else return push(com.worldtv.iptvplayer.ui.FirstLoadScreen(this))
+        }
         when {
             playlists.isEmpty() -> push(AddPlaylistScreen(this, firstRun = true))
             active == null -> push(PlaylistsScreen(this))

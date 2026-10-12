@@ -20,7 +20,6 @@ import com.worldtv.iptvplayer.Prefs
 import com.worldtv.iptvplayer.R
 import com.worldtv.iptvplayer.data.model.ContentType
 import com.worldtv.iptvplayer.data.net.AppDns
-import com.worldtv.iptvplayer.data.repo.Sort
 import com.worldtv.iptvplayer.data.online.OnlineAccount
 import com.worldtv.iptvplayer.data.online.OnlineService
 import com.worldtv.iptvplayer.player.SubtitleStyle
@@ -93,10 +92,9 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         fun s(id: Int, vararg args: Any) = activity.getString(id, *args)
         tiles += Tile("playlists", R.drawable.ic_s_list, { s(R.string.set_playlists) }) { activity.push(PlaylistsScreen(activity)) }
         tiles += Tile("add", R.drawable.ic_s_add, { s(R.string.add_playlist) }) { activity.push(AddPlaylistScreen(activity)) }
-        tiles += Tile("categories", R.drawable.ic_s_hide, { s(R.string.action_categories) }) { openCategories() }
-        tiles += Tile("live_sort", R.drawable.ic_s_sort, { s(R.string.live_sort_title) }, { liveSortLabel(prefs.liveSort) }) { chooseLiveSort() }
         tiles += Tile("auto_refresh", R.drawable.ic_s_autorenew, { s(R.string.auto_refresh_title) }, { autoRefreshLabel(prefs.autoRefresh) }) { chooseAutoRefresh() }
-        tiles += Tile("history", R.drawable.ic_s_history, { s(R.string.set_clear_history) }) { clearHistory() }
+        tiles += Tile("categories", R.drawable.ic_s_hide, { s(R.string.action_categories) }) { openCategories() }
+        tiles += Tile("live_order", R.drawable.ic_s_sort, { s(R.string.live_order_title) }) { openLiveOrder() }
         tiles += Tile("subtitles", R.drawable.ic_s_subtitles, { s(R.string.set_subtitles) }) { subtitleSettings() }
         tiles += Tile("online", R.drawable.ic_s_key, { s(R.string.set_online) }, { onlineSummary() }) { onlineAccounts() }
         tiles += Tile("layout", R.drawable.ic_s_layout, { s(R.string.set_layout) }, { s(if (mobile) R.string.set_value_mobile else R.string.set_value_tv) }) {
@@ -105,33 +103,19 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         }
         if (!mobile) {
             tiles += Tile("auto_start", R.drawable.ic_s_power, { s(R.string.set_auto_start) }, { s(if (prefs.autoStart) R.string.set_on else R.string.set_off) }) { toggleAutoStart() }
-            tiles += Tile("slots", R.drawable.ic_s_apps, { s(R.string.set_slots) }, { prefs.appSlotCount.toString() }) { chooseSlots() }
             tiles += Tile("home", R.drawable.ic_s_home, { s(R.string.set_home) }, { s(if (Apps.isDefaultHome(activity)) R.string.set_home_is else R.string.set_home_make) }) {
                 if (Apps.isDefaultHome(activity)) Apps.changeDefaultHome(activity) else Apps.requestDefaultHome(activity) { refresh() }
             }
+            tiles += Tile("slots", R.drawable.ic_s_apps, { s(R.string.set_slots) }, { prefs.appSlotCount.toString() }) { chooseSlots() }
         }
-        tiles += Tile("dns", R.drawable.ic_s_dns, { s(R.string.set_dns) }, { s(dnsLabel()) }) { prefs.dnsMode = (prefs.dnsMode + 1) % 3; refresh() }
+        tiles += Tile("dns", R.drawable.ic_s_dns, { s(R.string.set_dns) }, { s(dnsLabel()) }) { chooseDns() }
         tiles += Tile("auto_update", R.drawable.ic_s_download, { s(R.string.set_auto_update) }, { s(if (prefs.autoUpdate) R.string.set_on else R.string.set_off) }) {
             prefs.autoUpdate = !prefs.autoUpdate
             refresh()
         }
         tiles += Tile("update_now", R.drawable.ic_s_update, { s(R.string.set_update_now) }) { AppUpdates.checkNow(activity, scope) }
-        tiles += Tile("diagnostics", R.drawable.ic_s_autorenew, { s(R.string.set_diagnostics) }, { s(if (prefs.telemetryEnabled) R.string.set_on else R.string.set_off) }) {
-            prefs.telemetryEnabled = !prefs.telemetryEnabled
-            graph.telemetry.snapshotSettings()
-            graph.telemetry.event("settings", "diagnostics", mapOf("enabled" to prefs.telemetryEnabled))
-            refresh()
-        }
-        if (!mobile) {
-            tiles += Tile("all_apps", R.drawable.ic_s_apps, { s(R.string.all_apps) }) {
-                scope.launch {
-                    val apps = withContext(graph.io) { Apps.list(activity) }
-                    Apps.pick(activity, R.string.all_apps, apps) { Apps.launch(activity, it.pkg) }
-                }
-            }
-            tiles += Tile("system", R.drawable.ic_s_settings, { s(R.string.android_settings) }) { Apps.openAndroidSettings(activity) }
-        }
         tiles += Tile("help", R.drawable.ic_s_help, { s(R.string.help) }) { activity.push(HelpScreen(activity)) }
+        tiles += Tile("history", R.drawable.ic_s_history, { s(R.string.set_clear_history) }) { clearHistory() }
         tiles += Tile("reset", R.drawable.ic_s_reset, { s(R.string.set_reset) }) { confirmReset() }
     }
 
@@ -184,10 +168,25 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
 
     // ---- simple settings ----
 
-    private fun dnsLabel() = when (prefs.dnsMode) {
+    private fun dnsLabel(mode: Int = prefs.dnsMode) = when (mode) {
+        AppDns.MODE_BOTH -> R.string.set_dns_both
         AppDns.MODE_CLOUDFLARE -> R.string.set_dns_cloudflare
         AppDns.MODE_GOOGLE -> R.string.set_dns_google
         else -> R.string.set_dns_system
+    }
+
+    /** DNS: 1.1.1.1 + 8.8.8.8 (default), only one of them, or the box's own (off). */
+    private fun chooseDns() {
+        val modes = listOf(AppDns.MODE_BOTH, AppDns.MODE_CLOUDFLARE, AppDns.MODE_GOOGLE, AppDns.MODE_SYSTEM)
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.set_dns)
+            .setSingleChoiceItems(modes.map { activity.getString(dnsLabel(it)) }.toTypedArray(), modes.indexOf(prefs.dnsMode)) { d, which ->
+                prefs.dnsMode = modes[which]
+                refresh()
+                d.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     /** How many app slots the home screen shows: a list to pick from (1 to 14, rows of 5). */
@@ -244,33 +243,14 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         }
     }
 
-    // ---- Live channel sort ----
+    // ---- Live channel order ----
 
-    private fun liveSortLabel(s: Sort) = activity.getString(
-        when (s) {
-            Sort.NAME -> R.string.live_sort_az
-            Sort.NAME_DESC -> R.string.live_sort_za
-            else -> R.string.live_sort_default
-        },
-    )
-
-    /** Default (the provider's order), A–Z or Z–A; kept over reloads. Reset sorting = Default. */
-    private fun chooseLiveSort() {
-        val options = listOf(Sort.PROVIDER, Sort.NAME, Sort.NAME_DESC)
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.live_sort_title)
-            .setSingleChoiceItems(options.map { liveSortLabel(it) }.toTypedArray(), options.indexOf(prefs.liveSort)) { d, which ->
-                prefs.liveSort = options[which]
-                refresh()
-                d.dismiss()
-            }
-            .setNeutralButton(R.string.live_sort_reset) { _, _ ->
-                prefs.liveSort = Sort.PROVIDER
-                refresh()
-                activity.toast(activity.getString(R.string.live_sort_was_reset))
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+    /** The active playlist's live categories, to put channels in your own order. */
+    private fun openLiveOrder() {
+        scope.launch {
+            val p = graph.repo.playlist(prefs.activePlaylist) ?: return@launch activity.toast(activity.getString(R.string.no_playlist_yet))
+            activity.push(LiveOrderScreen(activity, p))
+        }
     }
 
     // ---- Automatic refresh ----

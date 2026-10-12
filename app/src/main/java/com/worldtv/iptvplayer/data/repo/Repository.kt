@@ -118,6 +118,19 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         db.writableDatabase.insertOrThrow("playlist", null, v)
     }
 
+    /** Edit: new name, kind, address and login; the PIN only when [pinHash] is given (else kept). */
+    suspend fun updatePlaylist(id: Long, name: String, kind: String, url: String, username: String?, password: String?, pinHash: String?) = withContext(io) {
+        val v = ContentValues().apply {
+            put("name", name)
+            put("kind", kind)
+            put("url", url)
+            put("username", username)
+            put("password", password)
+            if (pinHash != null) put("pin_hash", pinHash)
+        }
+        db.writableDatabase.update("playlist", v, "id = ?", arrayOf(id.toString()))
+    }
+
     /** Sets a playlist's PIN; null puts back the default 000000 (every playlist has a PIN). */
     suspend fun setPin(id: Long, pinHash: String?) = withContext(io) {
         val v = ContentValues().apply { put("pin_hash", pinHash ?: Pin.hash(Pin.DEFAULT)) }
@@ -139,6 +152,8 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             w.delete("shown_item", "playlist_id = ?", args)
             w.delete("live_watch", "playlist_id = ?", args)
             w.delete("most_watched", "playlist_id = ?", args)
+            w.delete("live_order", "playlist_id = ?", args)
+            liveOrdered.remove(id)
             w.delete("user_group_item", "group_id IN (SELECT id FROM user_group WHERE playlist_id = ?)", args)
             w.delete("user_group", "playlist_id = ?", args)
             w.delete("playlist", "id = ?", args)
@@ -538,7 +553,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
                 """SELECT e.item_id, e.name, e.logo, e.stream_url, e.ext, e.catchup_days,
                    EXISTS(SELECT 1 FROM favourite f WHERE f.playlist_id = e.playlist_id
                           AND f.type = e.type AND f.item_id = e.item_id), e.rating
-                   FROM entry e $where ORDER BY ${order(key, sort)} LIMIT $limit OFFSET $offset""",
+                   FROM entry e $where ORDER BY ${order(key, sort, hasLiveOrder(playlistId, type))} LIMIT $limit OFFSET $offset""",
                 args,
             ).use { c ->
                 val out = ArrayList<EntryRow>(c.count)
@@ -576,7 +591,11 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
                 "(SELECT g.added FROM user_group_item g WHERE g.group_id = $group AND g.item_id = ?)" to arrayOf(itemId)
             key == KEY_MOST_WATCHED -> "$WATCH_RANK < (SELECT m.rank FROM most_watched m WHERE m.playlist_id = ? AND m.item_id = ?)" to
                 arrayOf(playlistId.toString(), itemId)
-            key == KEY_FAV || sort == Sort.PROVIDER -> "e.sort < $pos" to emptyArray()
+            key == KEY_FAV -> "e.sort < $pos" to emptyArray()
+            sort == Sort.PROVIDER && hasLiveOrder(playlistId, type) ->
+                "$LIVE_POS < (SELECT COALESCE((SELECT o.pos FROM live_order o WHERE o.playlist_id = ? AND o.item_id = ?), $pos))" to
+                    arrayOf(playlistId.toString(), itemId)
+            sort == Sort.PROVIDER -> "e.sort < $pos" to emptyArray()
             sort == Sort.NAME -> "(e.name < ? COLLATE NOCASE OR (e.name = ? COLLATE NOCASE AND e.sort < $pos))" to arrayOf(name, name)
             sort == Sort.NAME_DESC -> "(e.name > ? COLLATE NOCASE OR (e.name = ? COLLATE NOCASE AND e.sort < $pos))" to arrayOf(name, name)
             else -> "e.sort < $pos" to emptyArray() // Movies / Series don't restore a position
@@ -779,6 +798,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         w.beginTransaction()
         try {
             for (t in RESET_TABLES) w.delete(t, null, null)
+            liveOrdered.clear()
             w.setTransactionSuccessful()
         } finally {
             w.endTransaction()
@@ -954,8 +974,11 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         }
     }
 
-    /** Continue watching: most recent first. Favourites: their own (provider) order. Else [sort]; ties keep the provider order. */
-    private fun order(key: String, sort: Sort) = when {
+    /**
+     * Continue watching: most recent first. Favourites: their own (provider) order. Else [sort];
+     * ties keep the provider order. [livePos]: Live TV's order set by hand, when there is one.
+     */
+    private fun order(key: String, sort: Sort, livePos: Boolean = false) = when {
         key == KEY_CONTINUE -> "(SELECT p.updated FROM progress p WHERE p.playlist_id = e.playlist_id AND p.type = e.type " +
             "AND p.item_id = e.item_id) DESC"
         key == KEY_FAV -> "e.sort"
@@ -966,8 +989,68 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             Sort.RATING -> "CAST(e.rating AS REAL) DESC, e.sort" // no rating counts as 0: last
             Sort.NAME -> "e.name COLLATE NOCASE, e.sort"
             Sort.NAME_DESC -> "e.name COLLATE NOCASE DESC, e.sort"
-            Sort.PROVIDER -> "e.sort"
+            Sort.PROVIDER -> if (livePos) LIVE_POS else "e.sort"
         }
+    }
+
+    // ---- live channel order (Settings > Live channel order) ----
+
+    /** Playlists with a live order set by hand (cached: most have none, and then lists cost nothing extra). */
+    private val liveOrdered = java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
+
+    private fun hasLiveOrder(playlistId: Long, type: ContentType): Boolean =
+        type == ContentType.LIVE && liveOrdered.getOrPut(playlistId) {
+            db.readableDatabase.rawQuery("SELECT 1 FROM live_order WHERE playlist_id = ? LIMIT 1", arrayOf(playlistId.toString()))
+                .use { it.moveToFirst() }
+        }
+
+    /** A category's channels (hidden ones too, so they keep their place), in the order shown. */
+    suspend fun liveOrder(playlistId: Long, catId: String): List<AdminEntry> = withContext(io) {
+        val ordered = hasLiveOrder(playlistId, ContentType.LIVE)
+        db.readableDatabase.rawQuery(
+            "SELECT e.item_id, e.name FROM entry e WHERE e.playlist_id = ? AND e.type = ? AND e.category_id = ? " +
+                "ORDER BY ${if (ordered) LIVE_POS else "e.sort"}",
+            arrayOf(playlistId.toString(), ContentType.LIVE.ordinal.toString(), catId),
+        ).use { c -> ArrayList<AdminEntry>(c.count).apply { while (c.moveToNext()) add(AdminEntry(c.getString(0), c.getString(1), false)) } }
+    }
+
+    /**
+     * Moves channel [from] of category [catId] to place [to] (indexes in [liveOrder]). The
+     * category's channels share out the same positions in the new order, so the category keeps
+     * its place among the others in All. Reloads keep it (positions are per channel id).
+     */
+    suspend fun moveLive(playlistId: Long, catId: String, from: Int, to: Int) = withContext(io) {
+        val w = db.writableDatabase
+        val ordered = hasLiveOrder(playlistId, ContentType.LIVE)
+        val rows = ArrayList<Pair<String, Long>>()
+        w.rawQuery(
+            "SELECT e.item_id, ${if (ordered) LIVE_POS else "e.sort"} FROM entry e WHERE e.playlist_id = ? AND e.type = ? AND e.category_id = ? " +
+                "ORDER BY ${if (ordered) LIVE_POS else "e.sort"}",
+            arrayOf(playlistId.toString(), ContentType.LIVE.ordinal.toString(), catId),
+        ).use { c -> while (c.moveToNext()) rows += c.getString(0) to c.getLong(1) }
+        if (from !in rows.indices || to !in rows.indices || from == to) return@withContext
+        val positions = rows.map { it.second }
+        val ids = rows.map { it.first }.toMutableList()
+        ids.add(to, ids.removeAt(from))
+        w.beginTransaction()
+        try {
+            for (i in minOf(from, to)..maxOf(from, to)) {
+                w.execSQL("INSERT OR REPLACE INTO live_order (playlist_id, item_id, pos) VALUES (?, ?, ?)", arrayOf<Any>(playlistId, ids[i], positions[i]))
+            }
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
+        liveOrdered[playlistId] = true
+    }
+
+    /** Back to the provider's order for category [catId]. */
+    suspend fun resetLiveOrder(playlistId: Long, catId: String) = withContext(io) {
+        db.writableDatabase.execSQL(
+            "DELETE FROM live_order WHERE playlist_id = ? AND item_id IN (SELECT item_id FROM entry WHERE playlist_id = ? AND type = ? AND category_id = ?)",
+            arrayOf<Any>(playlistId, playlistId, ContentType.LIVE.ordinal, catId),
+        )
+        liveOrdered.remove(playlistId)
     }
 
     private fun likeEscape(s: String) = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -1002,6 +1085,8 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         /** Live TV's Most watched list (see MostWatched). */
         const val KEY_MOST_WATCHED = "\u0000mostwatched"
         /** A row's place in Most watched (0 = top). */
+        /** A live channel's place: set by hand (live_order), else the provider's. */
+        private const val LIVE_POS = "COALESCE((SELECT o.pos FROM live_order o WHERE o.playlist_id = e.playlist_id AND o.item_id = e.item_id), e.sort)"
         private const val WATCH_RANK = "(SELECT m.rank FROM most_watched m WHERE m.playlist_id = e.playlist_id AND m.item_id = e.item_id)"
         private const val SEARCH_PREFIX = "\u0000search:"
         private const val GROUP_PREFIX = "\u0000group:"
@@ -1025,7 +1110,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
 
         private val RESET_TABLES = listOf(
             "entry", "category", "favourite", "progress", "hidden_category", "hidden_item", "shown_category", "shown_item",
-            "user_group_item", "user_group", "live_watch", "most_watched", "playlist",
+            "user_group_item", "user_group", "live_watch", "most_watched", "live_order", "playlist",
         )
 
         const val MIN_RESUME_MS = 30_000L
