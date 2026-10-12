@@ -93,14 +93,12 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         tiles += Tile("playlists", R.drawable.ic_s_list, { s(R.string.set_playlists) }) { activity.push(PlaylistsScreen(activity)) }
         tiles += Tile("add", R.drawable.ic_s_add, { s(R.string.add_playlist) }) { activity.push(AddPlaylistScreen(activity)) }
         tiles += Tile("auto_refresh", R.drawable.ic_s_autorenew, { s(R.string.auto_refresh_title) }, { autoRefreshLabel(prefs.autoRefresh) }) { chooseAutoRefresh() }
-        tiles += Tile("categories", R.drawable.ic_s_hide, { s(R.string.action_categories) }) { openCategories() }
-        tiles += Tile("live_order", R.drawable.ic_s_sort, { s(R.string.live_order_title) }) { openLiveOrder() }
         tiles += Tile("subtitles", R.drawable.ic_s_subtitles, { s(R.string.set_subtitles) }) { subtitleSettings() }
+        tiles += Tile("categories", R.drawable.ic_s_hide, { s(R.string.action_categories) }) { openCategories() }
+        tiles += Tile("category_order", R.drawable.ic_s_sort, { s(R.string.category_order_title) }) { openLiveOrder(categories = true) }
+        tiles += Tile("live_order", R.drawable.ic_s_sort, { s(R.string.live_order_title) }) { openLiveOrder() }
         tiles += Tile("online", R.drawable.ic_s_key, { s(R.string.set_online) }, { onlineSummary() }) { onlineAccounts() }
-        tiles += Tile("layout", R.drawable.ic_s_layout, { s(R.string.set_layout) }, { s(if (mobile) R.string.set_value_mobile else R.string.set_value_tv) }) {
-            prefs.uiMode = if (mobile) Prefs.UI_TV else Prefs.UI_MOBILE
-            activity.restartUi(thenSettings = true)
-        }
+        tiles += Tile("dns", R.drawable.ic_s_dns, { s(R.string.set_dns) }, { s(dnsLabel()) }) { chooseDns() }
         if (!mobile) {
             tiles += Tile("auto_start", R.drawable.ic_s_power, { s(R.string.set_auto_start) }, { s(if (prefs.autoStart) R.string.set_on else R.string.set_off) }) { toggleAutoStart() }
             tiles += Tile("home", R.drawable.ic_s_home, { s(R.string.set_home) }, { s(if (Apps.isDefaultHome(activity)) R.string.set_home_is else R.string.set_home_make) }) {
@@ -108,7 +106,10 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
             }
             tiles += Tile("slots", R.drawable.ic_s_apps, { s(R.string.set_slots) }, { prefs.appSlotCount.toString() }) { chooseSlots() }
         }
-        tiles += Tile("dns", R.drawable.ic_s_dns, { s(R.string.set_dns) }, { s(dnsLabel()) }) { chooseDns() }
+        tiles += Tile("layout", R.drawable.ic_s_layout, { s(R.string.set_layout) }, { s(if (mobile) R.string.set_value_mobile else R.string.set_value_tv) }) {
+            prefs.uiMode = if (mobile) Prefs.UI_TV else Prefs.UI_MOBILE
+            activity.restartUi(thenSettings = true)
+        }
         tiles += Tile("auto_update", R.drawable.ic_s_download, { s(R.string.set_auto_update) }, { s(if (prefs.autoUpdate) R.string.set_on else R.string.set_off) }) {
             prefs.autoUpdate = !prefs.autoUpdate
             refresh()
@@ -245,11 +246,11 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
 
     // ---- Live channel order ----
 
-    /** The active playlist's live categories, to put channels in your own order. */
-    private fun openLiveOrder() {
+    /** The active playlist's live categories, to put channels in your own order; or ([categories]) its categories. */
+    private fun openLiveOrder(categories: Boolean = false) {
         scope.launch {
             val p = graph.repo.playlist(prefs.activePlaylist) ?: return@launch activity.toast(activity.getString(R.string.no_playlist_yet))
-            activity.push(LiveOrderScreen(activity, p))
+            activity.push(LiveOrderScreen(activity, p, categories = categories))
         }
     }
 

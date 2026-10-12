@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings > Live channel order: the live categories, or one category's channels to move. -->
+<!-- Settings > Live channel order (the live categories, or one category's channels to move) and
+     Settings > Categories order (a library's categories to move). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -21,6 +22,20 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textSize="24sp" />
+
+        <!-- Categories order: which library. -->
+        <LinearLayout
+            android:id="@+id/tabs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView android:id="@+id/tab_live" style="@style/TileButton" android:layout_width="0dp" android:layout_weight="1" android:text="@string/live_tv" />
+            <TextView android:id="@+id/tab_movies" style="@style/TileButton" android:layout_width="0dp" android:layout_marginStart="10dp" android:layout_weight="1" android:text="@string/movies" />
+            <TextView android:id="@+id/tab_series" style="@style/TileButton" android:layout_width="0dp" android:layout_marginStart="10dp" android:layout_weight="1" android:text="@string/series" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/hint"

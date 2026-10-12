@@ -153,6 +153,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             w.delete("live_watch", "playlist_id = ?", args)
             w.delete("most_watched", "playlist_id = ?", args)
             w.delete("live_order", "playlist_id = ?", args)
+            w.delete("category_order", "playlist_id = ?", args)
             liveOrdered.remove(id)
             w.delete("user_group_item", "group_id IN (SELECT id FROM user_group WHERE playlist_id = ?)", args)
             w.delete("user_group", "playlist_id = ?", args)
@@ -198,12 +199,54 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         db.readableDatabase.rawQuery(
             "SELECT cat_id, name FROM category c WHERE playlist_id = ? AND type = ? AND NOT EXISTS(" +
                 "SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id AND h.type = c.type " +
-                "AND h.cat_id = c.cat_id) ORDER BY sort",
+                "AND h.cat_id = c.cat_id) ORDER BY $CAT_POS",
             arrayOf(playlistId.toString(), type.ordinal.toString()),
         ).use { c ->
             while (c.moveToNext()) out += CategoryRow(c.getString(0), c.getString(1))
         }
         out
+    }
+
+    // ---- category order (Settings > Categories order) ----
+
+    /** The shown categories of a library, in the order the library lists them. */
+    suspend fun categoryOrder(playlistId: Long, type: ContentType): List<CategoryRow> =
+        categories(playlistId, type).filterNot { isBuiltIn(it.key) }
+
+    /**
+     * Moves category [from] of a library to place [to] (indexes in [categoryOrder]). The
+     * categories in between share out the same positions in the new order. Reloads keep it.
+     */
+    suspend fun moveCategory(playlistId: Long, type: ContentType, from: Int, to: Int) = withContext(io) {
+        val w = db.writableDatabase
+        val rows = ArrayList<Pair<String, Long>>()
+        w.rawQuery(
+            "SELECT cat_id, $CAT_POS FROM category c WHERE playlist_id = ? AND type = ? AND NOT EXISTS(" +
+                "SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id AND h.type = c.type " +
+                "AND h.cat_id = c.cat_id) ORDER BY $CAT_POS",
+            arrayOf(playlistId.toString(), type.ordinal.toString()),
+        ).use { c -> while (c.moveToNext()) rows += c.getString(0) to c.getLong(1) }
+        if (from !in rows.indices || to !in rows.indices || from == to) return@withContext
+        val positions = rows.map { it.second }
+        val ids = rows.map { it.first }.toMutableList()
+        ids.add(to, ids.removeAt(from))
+        w.beginTransaction()
+        try {
+            for (i in minOf(from, to)..maxOf(from, to)) {
+                w.execSQL(
+                    "INSERT OR REPLACE INTO category_order (playlist_id, type, cat_id, pos) VALUES (?, ?, ?, ?)",
+                    arrayOf<Any>(playlistId, type.ordinal, ids[i], positions[i]),
+                )
+            }
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
+    }
+
+    /** Back to the provider's category order for one library. */
+    suspend fun resetCategoryOrder(playlistId: Long, type: ContentType) = withContext(io) {
+        db.writableDatabase.delete("category_order", "playlist_id = ? AND type = ?", arrayOf(playlistId.toString(), type.ordinal.toString()))
     }
 
     /** Every provider category, whether it is hidden and how many of its entries are: for the admin. */
@@ -219,7 +262,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         ).use { c -> while (c.moveToNext()) c.getString(0)?.let { hiddenPerCat[it] = c.getInt(1) } }
         r.rawQuery(
             "SELECT cat_id, name, EXISTS(SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id " +
-                "AND h.type = c.type AND h.cat_id = c.cat_id) FROM category c WHERE playlist_id = ? AND type = ? ORDER BY sort",
+                "AND h.type = c.type AND h.cat_id = c.cat_id) FROM category c WHERE playlist_id = ? AND type = ? ORDER BY $CAT_POS",
             args,
         ).use { c ->
             val out = ArrayList<AdminCategory>(c.count)
@@ -1085,6 +1128,8 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         /** Live TV's Most watched list (see MostWatched). */
         const val KEY_MOST_WATCHED = "\u0000mostwatched"
         /** A row's place in Most watched (0 = top). */
+        /** A category's place: set by hand (category_order), else the provider's. */
+        private const val CAT_POS = "COALESCE((SELECT o.pos FROM category_order o WHERE o.playlist_id = c.playlist_id AND o.type = c.type AND o.cat_id = c.cat_id), c.sort)"
         /** A live channel's place: set by hand (live_order), else the provider's. */
         private const val LIVE_POS = "COALESCE((SELECT o.pos FROM live_order o WHERE o.playlist_id = e.playlist_id AND o.item_id = e.item_id), e.sort)"
         private const val WATCH_RANK = "(SELECT m.rank FROM most_watched m WHERE m.playlist_id = e.playlist_id AND m.item_id = e.item_id)"
@@ -1110,7 +1155,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
 
         private val RESET_TABLES = listOf(
             "entry", "category", "favourite", "progress", "hidden_category", "hidden_item", "shown_category", "shown_item",
-            "user_group_item", "user_group", "live_watch", "most_watched", "live_order", "playlist",
+            "user_group_item", "user_group", "live_watch", "most_watched", "live_order", "category_order", "playlist",
         )
 
         const val MIN_RESUME_MS = 30_000L

@@ -186,6 +186,8 @@
     <string name="first_load_retry">Try again</string>
     <string name="first_load_own">Add my own playlist</string>
     <string name="first_load_paid">This demo has free-to-air channels only. A paid IPTV subscription can offer a lot more entertainment: thousands of live channels, sports, movies and series. Add yours any time in App Settings › Add playlist.</string>
+    <string name="category_order_title">Categories order</string>
+    <string name="category_order_hint">Put the categories of Live TV, Movies and Series in your own order. OK (tap) on a category picks it up (⇅); Up / Down move it; OK again puts it down. Or use the buttons. Saved at once; reloads keep it.</string>
     <string name="live_order_title">Live channel order</string>
     <string name="live_order_hint_categories">Choose a category to put its channels in your own order. Live TV then shows them that way (also in All).</string>
     <string name="live_order_hint">OK (tap) on a channel picks it up (⇅). Up / Down move it; OK again puts it down. Or use the buttons. Saved at once; reloads keep it.</string>

@@ -17,15 +17,31 @@ import kotlinx.coroutines.launch
 
 /**
  * Settings > Live channel order. Without [category]: the live categories; OK opens one. With
- * [category]: its channels in the order Live TV shows them. OK (tap) on a channel picks it up
- * (⇅); Up / Down move it; OK or Back puts it down. The buttons move the picked channel too
- * (touch), and "Provider order" undoes the category's changes. Saved at once; reloads keep it.
+ * [category]: its channels in the order Live TV shows them. With [categories] (Settings >
+ * Categories order): a library's categories (tabs: Live TV, Movies, Series).
+ *
+ * In the last two, OK (tap) on a row picks it up (⇅); Up / Down move it; OK or Back puts it
+ * down. The buttons move the picked row too (touch), and "Provider order" undoes the changes
+ * there. Saved at once; reloads keep it.
  */
 class LiveOrderScreen(
     activity: MainActivity,
     private val playlist: Playlist,
     private val category: CategoryRow? = null,
+    private val categories: Boolean = false,
 ) : Screen(activity) {
+
+    /** Rows can be picked up and moved (else: a list of categories to open). */
+    private val movable = category != null || categories
+    /** Categories order: the library shown. */
+    private var type = ContentType.LIVE
+    private val tabs by lazy {
+        mapOf(
+            ContentType.LIVE to root.findViewById<View>(R.id.tab_live),
+            ContentType.MOVIE to root.findViewById<View>(R.id.tab_movies),
+            ContentType.SERIES to root.findViewById<View>(R.id.tab_series),
+        )
+    }
 
     override val root: View = inflater.inflate(R.layout.screen_live_order, null)
     private val list: RecyclerView = root.findViewById(R.id.list)
@@ -38,13 +54,27 @@ class LiveOrderScreen(
 
     init {
         fullWidthOnMobile(R.id.form)
-        root.findViewById<TextView>(R.id.title).text =
-            if (category == null) activity.getString(R.string.live_order_title) else category.name
-        hint.setText(if (category == null) R.string.live_order_hint_categories else R.string.live_order_hint)
+        root.findViewById<TextView>(R.id.title).text = when {
+            categories -> activity.getString(R.string.category_order_title)
+            category == null -> activity.getString(R.string.live_order_title)
+            else -> category.name
+        }
+        hint.setText(
+            when {
+                categories -> R.string.category_order_hint
+                category == null -> R.string.live_order_hint_categories
+                else -> R.string.live_order_hint
+            },
+        )
+        if (categories) {
+            root.findViewById<View>(R.id.tabs).visibility = View.VISIBLE
+            tabs.forEach { (t, v) -> v.setOnClickListener { showType(t) } }
+            showTabs()
+        }
         list.layoutManager = LinearLayoutManager(activity)
         list.adapter = adapter
         list.itemAnimator = null
-        if (category != null) {
+        if (movable) {
             root.findViewById<View>(R.id.buttons).visibility = View.VISIBLE
             root.findViewById<View>(R.id.move_top).setOnClickListener { moveTo(0) }
             root.findViewById<View>(R.id.move_up).setOnClickListener { moveTo(picked - 1) }
@@ -63,9 +93,21 @@ class LiveOrderScreen(
         }
     }
 
-    private suspend fun load(focus: Int) {
+    private fun showType(t: ContentType) {
+        if (t == type) return
+        type = t
+        showTabs()
+        scope.launch { load(focus = 0, focusList = false) }
+    }
+
+    /** The library shown is the filled tab. */
+    private fun showTabs() = tabs.forEach { (t, v) -> v.isActivated = t == type }
+
+    private suspend fun load(focus: Int, focusList: Boolean = true) {
         rows.clear()
-        if (category == null) {
+        if (categories) {
+            graph.repo.categoryOrder(playlist.id, type).forEach { rows += it.key to it.name }
+        } else if (category == null) {
             graph.repo.categories(playlist.id, ContentType.LIVE)
                 .filterNot { Repository.isBuiltIn(it.key) }
                 .forEach { rows += it.key to it.name }
@@ -74,18 +116,24 @@ class LiveOrderScreen(
         }
         picked = -1
         adapter.notifyDataSetChanged()
-        focusRow(focus)
+        if (focusList) focusRow(focus)
     }
 
+    /** Focus on row [i]; the row may not be laid out yet (just loaded or scrolled to), so a few tries. */
     private fun focusRow(i: Int) {
         if (rows.isEmpty()) return
         val at = i.coerceIn(0, rows.size - 1)
         (list.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(at, list.height / 3)
-        list.post { list.findViewHolderForAdapterPosition(at)?.itemView?.requestFocus() }
+        var tries = 0
+        fun attempt() {
+            val v = list.findViewHolderForAdapterPosition(at)?.itemView
+            if (v != null) v.requestFocus() else if (++tries < 8) list.postDelayed({ attempt() }, 30)
+        }
+        list.post { attempt() }
     }
 
     private fun onRow(i: Int) {
-        if (category == null) {
+        if (!movable) {
             val (key, name) = rows[i]
             activity.push(LiveOrderScreen(activity, playlist, CategoryRow(key, name)))
             return
@@ -98,7 +146,7 @@ class LiveOrderScreen(
 
     /** Moves the picked channel to [to]; it stays picked and focused. */
     private fun moveTo(to: Int) {
-        val cat = category ?: return
+        if (!movable) return
         val from = picked
         if (from < 0) return activity.toast(activity.getString(R.string.order_pick_first))
         val target = to.coerceIn(0, rows.size - 1)
@@ -109,13 +157,18 @@ class LiveOrderScreen(
         // The numbers of every row in between change too.
         adapter.notifyItemRangeChanged(minOf(from, target), kotlin.math.abs(from - target) + 1)
         focusRow(target)
-        scope.launch { graph.repo.moveLive(playlist.id, cat.key, from, target) }
+        val t = type
+        scope.launch {
+            if (categories) graph.repo.moveCategory(playlist.id, t, from, target)
+            else graph.repo.moveLive(playlist.id, category!!.key, from, target)
+        }
     }
 
     private fun resetOrder() {
-        val cat = category ?: return
+        if (!movable) return
         scope.launch {
-            graph.repo.resetLiveOrder(playlist.id, cat.key)
+            if (categories) graph.repo.resetCategoryOrder(playlist.id, type)
+            else graph.repo.resetLiveOrder(playlist.id, category!!.key)
             activity.toast(activity.getString(R.string.order_reset_done))
             load(focus = 0)
         }
@@ -157,7 +210,7 @@ class LiveOrderScreen(
         override fun onBindViewHolder(holder: VH, position: Int) {
             val name = rows[position].second
             holder.text.text = when {
-                category == null -> name
+                !movable -> name
                 position == picked -> "⇅   ${position + 1}.  $name"
                 else -> "${position + 1}.  $name"
             }

@@ -84,12 +84,26 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
         createGroups(db)
         createWatch(db)
         createLiveOrder(db)
+        createCategoryOrder(db)
     }
 
     /**
      * Live TV viewing for Most watched: one row per counted view (5 min to 4 h of picture), and
      * the list worked out from them (rank 0 = top). Kept by item id over re-syncs, like favourites.
      */
+    /** Category order set by hand (Settings > Categories order), per library. */
+    private fun createCategoryOrder(db: SQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS category_order (
+                playlist_id INTEGER NOT NULL,
+                type INTEGER NOT NULL,
+                cat_id TEXT NOT NULL,
+                pos INTEGER NOT NULL,
+                PRIMARY KEY (playlist_id, type, cat_id)
+            )""",
+        )
+    }
+
     /** Live channel order set by hand (Settings > Live channel order): a position per channel. */
     private fun createLiveOrder(db: SQLiteDatabase) {
         db.execSQL(
@@ -232,6 +246,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
         }
         if (oldVersion < 10) createWatch(db)
         if (oldVersion < 11) createLiveOrder(db)
+        if (oldVersion < 12) createCategoryOrder(db)
         if (oldVersion < 6) {
             // The provider's is_adult flag; and every playlist gets a PIN, 000000 by default.
             db.execSQL("ALTER TABLE entry ADD COLUMN adult INTEGER NOT NULL DEFAULT 0")
@@ -244,6 +259,6 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
     }
 
     companion object {
-        const val VERSION = 11
+        const val VERSION = 12
     }
 }
