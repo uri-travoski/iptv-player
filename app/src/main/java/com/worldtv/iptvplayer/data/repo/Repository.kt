@@ -5,7 +5,6 @@ import android.database.Cursor
 import com.worldtv.iptvplayer.data.db.Db
 import com.worldtv.iptvplayer.data.model.ContentType
 import com.worldtv.iptvplayer.data.source.AdultNames
-import com.worldtv.iptvplayer.data.source.TitleLanguage
 import com.worldtv.iptvplayer.data.source.TitleMatch
 import com.worldtv.iptvplayer.data.source.XtreamAccount
 import kotlinx.coroutines.CoroutineDispatcher
@@ -679,33 +678,6 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         return out
     }
 
-    /**
-     * Home's "Recently added" row: the [limit] newest English titles of [type] that have a poster,
-     * by the date they were added (the provider's, or first seen; see Syncer). English: see
-     * TitleLanguage. Hidden and adult titles are left out. Empty when the playlist has no dates.
-     * Newest first via the entry_added index, stopping once [limit] are found (English may be a
-     * small share of a big catalogue, so up to [RECENT_SCAN] rows are looked at).
-     */
-    suspend fun recentlyAdded(playlistId: Long, type: ContentType, names: AdultNames, limit: Int = RECENT_SIZE): List<EntryRow> = withContext(io) {
-        val (where, args) = filter(playlistId, type, KEY_ALL)
-        val ids = ArrayList<String>()
-        db.readableDatabase.rawQuery(
-            "SELECT e.item_id, e.name, e.adult, c.name FROM entry e LEFT JOIN category c ON c.playlist_id = e.playlist_id " +
-                "AND c.type = e.type AND c.cat_id = e.category_id $where AND e.added > 0 AND e.logo IS NOT NULL AND e.logo != '' " +
-                "ORDER BY e.added DESC, e.sort LIMIT $RECENT_SCAN",
-            args,
-        ).use { c ->
-            while (c.moveToNext() && ids.size < limit) {
-                val name = c.getString(1)
-                val category = c.getStringOrNull(3)
-                val adult = c.getInt(2) == 1 || names.isAdultEntry(name) || (category != null && names.isAdultCategory(category))
-                if (!adult && TitleLanguage.isEnglish(name, category)) ids += c.getString(0)
-            }
-        }
-        val byId = rowsById(playlistId, type, ids).associateBy { it.itemId }
-        ids.mapNotNull { byId[it] }
-    }
-
     // ---- history and reset ----
 
     /**
@@ -1055,12 +1027,6 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             "entry", "category", "favourite", "progress", "hidden_category", "hidden_item", "shown_category", "shown_item",
             "user_group_item", "user_group", "live_watch", "most_watched", "playlist",
         )
-
-        /** Titles in each of Home's Recently added rows. */
-        const val RECENT_SIZE = 30
-
-        /** Newest titles looked at for a Recently added row, at most. */
-        const val RECENT_SCAN = 50_000
 
         const val MIN_RESUME_MS = 30_000L
         const val END_PERCENT = 95

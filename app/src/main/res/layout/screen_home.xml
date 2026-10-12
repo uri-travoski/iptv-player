@@ -91,15 +91,6 @@
                 android:text="@string/series" />
         </LinearLayout>
 
-        <!-- Recently added movies, then series (HomeScreen fills them). -->
-        <include
-            android:id="@+id/recent_movies"
-            layout="@layout/section_recent" />
-
-        <include
-            android:id="@+id/recent_series"
-            layout="@layout/section_recent" />
-
         <!-- Rows of 5: first the user's first app + Reload playlist, App Settings, All apps and
              System settings (always on the right); more apps in rows of 5 below. -->
         <LinearLayout

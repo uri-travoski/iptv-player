@@ -284,7 +284,7 @@ class Syncer(
     /**
      * Titles the provider gives no date for (all of an M3U playlist; some Xtream servers) get the
      * day they first appeared: a known title keeps the date it had, a new one gets now. So
-     * "Recently added" and the Newest sort work after the next reload. A first load dates
+     * the Newest sort works after the next reload. A first load dates
      * nothing (everything would be "new"), nor does a reload where most titles look new (links
      * that change every time, e.g. with a token in them).
      */

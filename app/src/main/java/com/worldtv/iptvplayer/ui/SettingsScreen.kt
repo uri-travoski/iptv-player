@@ -14,7 +14,6 @@ import android.widget.LinearLayout
 import android.widget.Space
 import android.widget.TextView
 import coil3.SingletonImageLoader
-import com.worldtv.iptvplayer.AppGraph
 import com.worldtv.iptvplayer.AutoRefresh
 import com.worldtv.iptvplayer.MainActivity
 import com.worldtv.iptvplayer.Prefs
@@ -531,10 +530,8 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
                     val images = SingletonImageLoader.get(app)
                     images.memoryCache?.clear()
                     images.diskCache?.clear()
-                    graph.homeImages.memoryCache?.clear()
-                    graph.homeImages.diskCache?.clear()
                     // Everything else in the cache (downloaded subtitles, update files).
-                    app.cacheDir.listFiles()?.filter { it.name != "images" && it.name != AppGraph.HOME_IMAGES_DIR }?.forEach { it.deleteRecursively() }
+                    app.cacheDir.listFiles()?.filter { it.name != "images" }?.forEach { it.deleteRecursively() }
                 }
                 val id = graph.addDefaultPlaylist()
                 // Offline: it stays, and loads by itself later (automatic refresh).

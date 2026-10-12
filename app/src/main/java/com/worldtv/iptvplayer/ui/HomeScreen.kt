@@ -9,21 +9,15 @@ import android.widget.LinearLayout
 import android.widget.Space
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.worldtv.iptvplayer.MainActivity
 import com.worldtv.iptvplayer.R
 import com.worldtv.iptvplayer.data.model.ContentType
-import com.worldtv.iptvplayer.data.repo.EntryRow
-import com.worldtv.iptvplayer.data.repo.Playlist
-import com.worldtv.iptvplayer.data.repo.Repository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Live TV · Movies · Series on top. Then Recently added movies and series (when the playlist has
- * dates). Below, rows of 5: the first holds the user's first app and,
+ * Live TV · Movies · Series on top. Below, rows of 5: the first holds the user's first app and,
  * always on the right, Reload playlist, App Settings, All apps and System settings; more apps
  * (1..14 slots, set in App Settings) continue in rows of 5 underneath. The big tiles shrink to
  * fit; extra rows scroll into view on focus.
@@ -43,32 +37,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     private val reloadStatus: TextView = root.findViewById(R.id.reload_status)
     private var reloading = false
 
-    /** One Recently added row. */
-    private inner class Recent(val type: ContentType, val view: View, header: Int) {
-        val list: RecyclerView = view.findViewById(R.id.recent_list)
-        val title: TextView = view.findViewById(R.id.recent_title)
-        val adapter = RecentAdapter(graph.homeImages, mobile, "recent:${type.ordinal}:", { _, row -> openRecent(type, row) }) { i, row -> onRecentFocused(this, i, row) }
-        /** Poster to come back to when the row gets focus again. */
-        var lastIndex = 0
-        val shown get() = view.visibility == View.VISIBLE
-
-        init {
-            view.findViewById<TextView>(R.id.recent_header).setText(header)
-            list.layoutManager = LinearLayoutManager(activity, RecyclerView.HORIZONTAL, false)
-            list.adapter = adapter
-            list.itemAnimator = null
-        }
-    }
-
-    private val recents = listOf(
-        Recent(ContentType.MOVIE, root.findViewById(R.id.recent_movies), R.string.recent_movies),
-        Recent(ContentType.SERIES, root.findViewById(R.id.recent_series), R.string.recent_series),
-    )
-    /** Playlist the Recently added rows come from. */
-    private var recentPlaylist: Playlist? = null
-    /** Rows of app slots (TV), for sizing the big tiles. */
-    private var slotRows = 1
-
     /** Slot views in order, rebuilt when the slot count changes. */
     private var slots: List<View> = emptyList()
     private var builtCount = -1
@@ -85,10 +53,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         if (mobile) bigTiles.forEach { shrinkIcon(it as TextView) }
         val version = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName
         root.findViewById<TextView>(R.id.version).text = activity.getString(R.string.version_label, version)
-        // Leaving the posters (to a tile, an app slot): the title names go.
-        root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now ->
-            if (now != null && !isRecentPoster(now) && isInside(now)) recents.forEach { it.title.text = "" }
-        }
     }
 
     override fun onShown() {
@@ -99,7 +63,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         // Back to where the user was (e.g. the app slot they opened), else Live TV.
         (lastFocusTag?.let { root.findViewWithTag<View>(it) } ?: live).requestFocus()
         scope.launch { showAccount() }
-        scope.launch { showRecent() }
         scope.launch { showSlots() } // an app may have been installed or removed meanwhile
         scope.launch { autoRefresh() }
         shown = true
@@ -168,8 +131,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
 
         // Down from any big tile goes to the first app slot, not the one under it.
         bigTiles.forEach { it.nextFocusDownId = list.first().id }
-        slotRows = 1 + moreRows
-        fitBigTiles(slotRows)
+        fitBigTiles(1 + moreRows)
     }
 
     private fun newRow(index: Int): LinearLayout {
@@ -187,8 +149,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
      */
     private fun fitBigTiles(rowCount: Int) {
         scroll.post {
-            val recentHeight = recents.sumOf { if (it.shown) it.view.height.takeIf { h -> h > 0 } ?: dp(RECENT_HEIGHT) else 0 }
-            val rowsHeight = rowCount * dp(CELL_HEIGHT) + (rowCount - 1) * dp(ROW_GAP) + dp(24 + 16) + recentHeight
+            val rowsHeight = rowCount * dp(CELL_HEIGHT) + (rowCount - 1) * dp(ROW_GAP) + dp(24 + 16)
             val target = (scroll.height - rowsHeight).coerceIn(dp(170), dp(250))
             val top = if (target < dp(220)) dp(20) else dp(44) // keeps icon + label centred
             bigTiles.forEach {
@@ -376,7 +337,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
                 graph.autoRefreshedThisRun += p.id
                 reloadStatus.setText(if (auto) R.string.auto_refresh_done else R.string.reload_done)
                 showAccount()
-                showRecent()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -391,124 +351,8 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         }
     }
 
-    // ---- Recently added ----
-
-    /**
-     * Fills the Recently added rows: English titles with a poster, from the database (quick,
-     * local), and of those only the ones whose poster is in the home cache (a broken link never
-     * shows as an empty box). Posters are downloaded once per playlist load: the first time Home
-     * shows after it; the rows then fill in.
-     */
-    private suspend fun showRecent(download: Boolean = true) {
-        val p = graph.repo.playlist(graph.prefs.activePlaylist)
-        recentPlaylist = p
-        val names = graph.adultNames()
-        val candidates = recents.map { r ->
-            if (p == null) emptyList() else graph.repo.recentlyAdded(p.id, r.type, names, Repository.RECENT_SIZE + RECENT_SPARE)
-        }
-        val cached = HomePosters.cached(graph, candidates.flatten().mapNotNull { it.logo })
-        recents.forEachIndexed { i, r ->
-            val rows = candidates[i].filter { it.logo in cached }.take(Repository.RECENT_SIZE)
-            r.adapter.submit(rows)
-            r.view.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
-        }
-        if (!mobile) fitBigTiles(slotRows)
-        if (p == null || !download) return
-        // The rules version too: when the choice of titles changes in an update, their posters download.
-        val stamp = "${p.id}:${p.lastSync}:$RECENT_RULES"
-        if (graph.prefs.homePostersFor == stamp || HomePosters.busy) return
-        val urls = candidates.flatten().mapNotNull { it.logo }
-        val app = activity.applicationContext
-        val g = graph
-        g.appScope.launch {
-            val got = HomePosters.prefetch(g, app, urls)
-            // Nothing at all came (offline?): try again next time Home shows.
-            if (got > 0 || urls.isEmpty()) g.prefs.homePostersFor = stamp
-            if (shown) scope.launch { showRecent(download = false) }
-        }
-    }
-
-    private fun openRecent(type: ContentType, row: EntryRow) {
-        val p = recentPlaylist ?: return
-        activity.push(VodDetailScreen(activity, p, type, row) {})
-    }
-
-    private fun isRecentPoster(v: View) = (v.tag as? String)?.startsWith("recent:") == true
-
-    private fun onRecentFocused(r: Recent, index: Int, row: EntryRow) {
-        r.lastIndex = index
-        r.title.text = row.name
-        recents.filter { it !== r }.forEach { it.title.text = "" }
-        revealRow(r)
-    }
-
-    /**
-     * Scrolls just enough for the whole row (header and posters) to be on screen. Through the
-     * scroll view's own focus scrolling, so a quick next key press (to the app slots) wins.
-     */
-    private fun revealRow(r: Recent) {
-        r.view.requestRectangleOnScreen(android.graphics.Rect(0, -dp(8), r.view.width, r.view.height + dp(8)))
-    }
-
-    /** Gives focus to [r]'s poster last focused (the first one the first time). */
-    private fun focusRecent(r: Recent): Boolean {
-        val i = r.lastIndex.coerceIn(0, r.adapter.itemCount - 1)
-        val lm = r.list.layoutManager as LinearLayoutManager
-        val v = lm.findViewByPosition(i)
-        if (v != null) {
-            v.requestFocus()
-        } else {
-            lm.scrollToPosition(i)
-            r.list.post { lm.findViewByPosition(i)?.requestFocus() }
-        }
-        return true
-    }
-
-    /**
-     * TV D-pad between the big tiles, the Recently added rows and the app slots: Down/Up go row to
-     * row (to the poster last used); Left/Right stop at a row's ends instead of jumping away.
-     */
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (mobile) return false
-        val focused = activity.currentFocus ?: return false
-        val shownRows = recents.filter { it.shown && it.adapter.itemCount > 0 }
-        if (shownRows.isEmpty()) return false
-        val at = shownRows.indexOfFirst { focused.parent === it.list }
-        when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_DOWN -> when {
-                focused in bigTiles -> return focusRecent(shownRows.first())
-                at >= 0 && at + 1 < shownRows.size -> return focusRecent(shownRows[at + 1])
-                at >= 0 -> {
-                    val first = (rows.getChildAt(0) as? ViewGroup)?.getChildAt(0) ?: return true
-                    first.requestFocus()
-                    return true
-                }
-            }
-            KeyEvent.KEYCODE_DPAD_UP -> when {
-                at > 0 -> return focusRecent(shownRows[at - 1])
-                at == 0 -> {
-                    (if (shownRows[0].type == ContentType.SERIES) bigTiles[2] else bigTiles[1]).requestFocus()
-                    return true
-                }
-                focused.parent === rows.getChildAt(0) -> return focusRecent(shownRows.last())
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> if (at >= 0 && shownRows[at].list.getChildAdapterPosition(focused) == 0) return true
-            KeyEvent.KEYCODE_DPAD_RIGHT -> if (at >= 0) {
-                val r = shownRows[at]
-                if (r.list.getChildAdapterPosition(focused) == r.adapter.itemCount - 1) return true
-            }
-        }
-        return false
-    }
-
     private companion object {
         const val COLUMNS = 5
-        /** Bumped when the choice of Recently added titles changes (2: English with a poster). */
-        const val RECENT_RULES = 2
-        /** Extra titles per row whose posters are downloaded, in case some links are broken. */
-        const val RECENT_SPARE = 10
-        /** A Recently added row's height before it is laid out (dp). */
-        const val RECENT_HEIGHT = 200
         const val CELL_HEIGHT = 80
         const val ROW_GAP = 12
     }
