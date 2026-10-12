@@ -11,10 +11,6 @@ import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import coil3.load
-import coil3.request.CachePolicy
-import coil3.request.crossfade
-import coil3.request.transformations
 import com.worldtv.iptvplayer.MainActivity
 import com.worldtv.iptvplayer.R
 import com.worldtv.iptvplayer.data.model.ContentType
@@ -26,7 +22,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Live TV · Movies · Series on top. Then Recently added movies and series (when the playlist has
- * dates): the focused title's poster fills the background (TV). Below, rows of 5: the first holds the user's first app and,
+ * dates). Below, rows of 5: the first holds the user's first app and,
  * always on the right, Reload playlist, App Settings, All apps and System settings; more apps
  * (1..14 slots, set in App Settings) continue in rows of 5 underneath. The big tiles shrink to
  * fit; extra rows scroll into view on focus.
@@ -45,13 +41,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     private val busy: View = root.findViewById(R.id.busy)
     private val reloadStatus: TextView = root.findViewById(R.id.reload_status)
     private var reloading = false
-
-    /** TV only: the focused Recently added title's poster behind everything. */
-    private val backdropLayer: View? = root.findViewById(R.id.backdrop_layer)
-    private val backdrop: ImageView? = root.findViewById(R.id.backdrop)
-    private var backdropUrl: String? = null
-    private var pendingBackdrop: String? = null
-    private val backdropTask = Runnable { showBackdrop(pendingBackdrop) }
 
     /** One Recently added row. */
     private inner class Recent(val type: ContentType, val view: View, header: Int) {
@@ -95,12 +84,9 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         if (mobile) bigTiles.forEach { shrinkIcon(it as TextView) }
         val version = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName
         root.findViewById<TextView>(R.id.version).text = activity.getString(R.string.version_label, version)
-        // Leaving the posters (to a tile, an app slot): the backdrop fades away.
+        // Leaving the posters (to a tile, an app slot): the title names go.
         root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now ->
-            if (now != null && !isRecentPoster(now) && isInside(now)) {
-                hideBackdrop()
-                recents.forEach { it.title.text = "" }
-            }
+            if (now != null && !isRecentPoster(now) && isInside(now)) recents.forEach { it.title.text = "" }
         }
     }
 
@@ -125,7 +111,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
 
     override fun onHidden() {
         shown = false
-        root.removeCallbacks(backdropTask)
         val focused = activity.currentFocus
         if (focused != null && focused.tag is String && isInside(focused)) lastFocusTag = focused.tag as String
     }
@@ -445,11 +430,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         r.title.text = row.name
         recents.filter { it !== r }.forEach { it.title.text = "" }
         revealRow(r)
-        if (backdropLayer == null) return
-        // Only once the selection rests: scrolling along the row loads nothing.
-        root.removeCallbacks(backdropTask)
-        pendingBackdrop = row.logo
-        root.postDelayed(backdropTask, BACKDROP_DELAY_MS)
     }
 
     /**
@@ -458,34 +438,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
      */
     private fun revealRow(r: Recent) {
         r.view.requestRectangleOnScreen(android.graphics.Rect(0, -dp(8), r.view.width, r.view.height + dp(8)))
-    }
-
-    private fun showBackdrop(url: String?) {
-        val img = backdrop ?: return
-        val layer = backdropLayer ?: return
-        if (url.isNullOrBlank()) return hideBackdrop()
-        if (url != backdropUrl) {
-            backdropUrl = url
-            // A tiny decode, blurred on the CPU, stretched to the screen: no GPU effects (some
-            // boxes' Android 12 draws nothing with them) and next to no memory.
-            img.load(url, graph.homeImages) {
-                networkCachePolicy(CachePolicy.DISABLED)
-                size(BACKDROP_WIDTH, BACKDROP_WIDTH * 9 / 16)
-                transformations(SoftBlur)
-                crossfade(300)
-                listener(onError = { _, r ->
-                    android.util.Log.w("WorldTV.Home", "backdrop not shown: ${r.throwable}")
-                    if (backdropUrl == url) hideBackdrop()
-                })
-            }
-        }
-        layer.animate().alpha(1f).setDuration(300).start()
-    }
-
-    private fun hideBackdrop() {
-        root.removeCallbacks(backdropTask)
-        val layer = backdropLayer ?: return
-        if (layer.alpha > 0f) layer.animate().alpha(0f).setDuration(250).start()
     }
 
     /** Gives focus to [r]'s poster last focused (the first one the first time). */
@@ -543,10 +495,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         const val COLUMNS = 5
         /** A Recently added row's height before it is laid out (dp). */
         const val RECENT_HEIGHT = 200
-        /** Focus must rest this long on a poster before the backdrop changes. */
-        const val BACKDROP_DELAY_MS = 300L
-        /** Backdrop decode width (px); the poster is then about 96 × 144 before the blur. */
-        const val BACKDROP_WIDTH = 96
         const val CELL_HEIGHT = 80
         const val ROW_GAP = 12
     }

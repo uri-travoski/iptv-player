@@ -1,29 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Behind everything: the focused Recently added title's poster, faded in, darkened by a scrim. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent">
-
-    <FrameLayout
-        android:id="@+id/backdrop_layer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:alpha="0">
-
-        <ImageView
-            android:id="@+id/backdrop"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no"
-            android:scaleType="centerCrop" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@drawable/bg_home_scrim" />
-    </FrameLayout>
-
-<LinearLayout
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -144,4 +120,3 @@
         android:paddingBottom="20dp"
         android:textSize="14sp" />
 </LinearLayout>
-</FrameLayout>
