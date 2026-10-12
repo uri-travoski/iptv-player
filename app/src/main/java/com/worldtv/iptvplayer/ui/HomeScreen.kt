@@ -1,9 +1,6 @@
 package com.worldtv.iptvplayer.ui
 
 import android.app.AlertDialog
-import android.graphics.RenderEffect
-import android.graphics.Shader
-import android.os.Build
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
@@ -17,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView
 import coil3.load
 import coil3.request.CachePolicy
 import coil3.request.crossfade
+import coil3.request.transformations
 import com.worldtv.iptvplayer.MainActivity
 import com.worldtv.iptvplayer.R
 import com.worldtv.iptvplayer.data.model.ContentType
@@ -97,8 +95,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         if (mobile) bigTiles.forEach { shrinkIcon(it as TextView) }
         val version = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName
         root.findViewById<TextView>(R.id.version).text = activity.getString(R.string.version_label, version)
-        // Android 12+: a real blur; older boxes get a small decode stretched, soft enough.
-        if (Build.VERSION.SDK_INT >= 31) backdrop?.setRenderEffect(RenderEffect.createBlurEffect(dp(10).toFloat(), dp(10).toFloat(), Shader.TileMode.CLAMP))
         // Leaving the posters (to a tile, an app slot): the backdrop fades away.
         root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now ->
             if (now != null && !isRecentPoster(now) && isInside(now)) {
@@ -470,12 +466,17 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         if (url.isNullOrBlank()) return hideBackdrop()
         if (url != backdropUrl) {
             backdropUrl = url
-            val w = if (Build.VERSION.SDK_INT >= 31) 384 else 160
+            // A tiny decode, blurred on the CPU, stretched to the screen: no GPU effects (some
+            // boxes' Android 12 draws nothing with them) and next to no memory.
             img.load(url, graph.homeImages) {
                 networkCachePolicy(CachePolicy.DISABLED)
-                size(w, w * 9 / 16)
+                size(BACKDROP_WIDTH, BACKDROP_WIDTH * 9 / 16)
+                transformations(SoftBlur)
                 crossfade(300)
-                listener(onError = { _, _ -> if (backdropUrl == url) hideBackdrop() })
+                listener(onError = { _, r ->
+                    android.util.Log.w("WorldTV.Home", "backdrop not shown: ${r.throwable}")
+                    if (backdropUrl == url) hideBackdrop()
+                })
             }
         }
         layer.animate().alpha(1f).setDuration(300).start()
@@ -544,6 +545,8 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         const val RECENT_HEIGHT = 200
         /** Focus must rest this long on a poster before the backdrop changes. */
         const val BACKDROP_DELAY_MS = 300L
+        /** Backdrop decode width (px); the poster is then about 96 × 144 before the blur. */
+        const val BACKDROP_WIDTH = 96
         const val CELL_HEIGHT = 80
         const val ROW_GAP = 12
     }

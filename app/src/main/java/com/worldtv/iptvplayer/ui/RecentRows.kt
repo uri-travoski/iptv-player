@@ -68,6 +68,54 @@ object HomePosters {
     }
 }
 
+/**
+ * Home's backdrop blur: two box-blur passes over a tiny bitmap (about 96 × 144, so ~14k
+ * pixels: well under a millisecond), then the ImageView's smooth stretch does the rest.
+ */
+object SoftBlur : coil3.transform.Transformation() {
+    private const val RADIUS = 3
+
+    override val cacheKey = "softblur$RADIUS"
+
+    override suspend fun transform(input: android.graphics.Bitmap, size: coil3.size.Size): android.graphics.Bitmap {
+        val w = input.width
+        val h = input.height
+        val px = IntArray(w * h)
+        input.getPixels(px, 0, w, 0, 0, w, h)
+        val tmp = IntArray(w * h)
+        repeat(2) {
+            boxBlur(px, tmp, w, h, horizontal = true)
+            boxBlur(tmp, px, w, h, horizontal = false)
+        }
+        return android.graphics.Bitmap.createBitmap(px, w, h, android.graphics.Bitmap.Config.ARGB_8888)
+    }
+
+    /** One pass along rows or columns: each pixel becomes the average of the 2r+1 around it. */
+    private fun boxBlur(src: IntArray, dst: IntArray, w: Int, h: Int, horizontal: Boolean) {
+        val lines = if (horizontal) h else w
+        val len = if (horizontal) w else h
+        for (line in 0 until lines) {
+            fun at(i: Int) = src[if (horizontal) line * w + i.coerceIn(0, len - 1) else i.coerceIn(0, len - 1) * w + line]
+            var r = 0
+            var g = 0
+            var b = 0
+            for (i in -RADIUS..RADIUS) {
+                val c = at(i)
+                r += (c shr 16) and 0xFF; g += (c shr 8) and 0xFF; b += c and 0xFF
+            }
+            val n = 2 * RADIUS + 1
+            for (i in 0 until len) {
+                dst[if (horizontal) line * w + i else i * w + line] = (0xFF shl 24) or ((r / n) shl 16) or ((g / n) shl 8) or (b / n)
+                val add = at(i + RADIUS + 1)
+                val sub = at(i - RADIUS)
+                r += ((add shr 16) and 0xFF) - ((sub shr 16) and 0xFF)
+                g += ((add shr 8) and 0xFF) - ((sub shr 8) and 0xFF)
+                b += (add and 0xFF) - (sub and 0xFF)
+            }
+        }
+    }
+}
+
 /** One Recently added row: posters across. OK/tap opens the title; focus reports it (TV backdrop). */
 class RecentAdapter(
     private val loader: ImageLoader,
