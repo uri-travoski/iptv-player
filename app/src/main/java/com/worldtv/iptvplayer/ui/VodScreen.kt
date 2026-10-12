@@ -100,6 +100,14 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return stopDownAtEnd(grid, activity.currentFocus, count, columns)
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !mobile) {
+            // From the first poster column back to the category being browsed, wherever it is.
+            val f = activity.currentFocus
+            if (f?.parent === grid && grid.getChildAdapterPosition(f) % columns == 0 && categoryIndex >= 0) {
+                focusCategory(categoryIndex)
+                return true
+            }
+        }
         if (keyCode != KeyEvent.KEYCODE_MENU) return false
         val focused = activity.currentFocus ?: return false
         if (focused.parent !== grid) return false
@@ -216,6 +224,22 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
             Sort.PROVIDER -> R.string.sort_provider
         },
     )
+
+    /** Focus on category [index], scrolling it into view first if needed. */
+    private fun focusCategory(index: Int) {
+        val now = categoriesView.findViewHolderForAdapterPosition(index)?.itemView
+        if (now != null && now.isShown) {
+            now.requestFocus()
+            return
+        }
+        (categoriesView.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(index, categoriesView.height / 3)
+        var tries = 0
+        fun attempt() {
+            val v = categoriesView.findViewHolderForAdapterPosition(index)?.itemView
+            if (v != null) v.requestFocus() else if (++tries < 8) categoriesView.postDelayed({ attempt() }, 30)
+        }
+        categoriesView.post { attempt() }
+    }
 
     private fun focusPoster(index: Int) {
         if (count == 0) return

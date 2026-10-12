@@ -220,6 +220,13 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
                 return true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> return stopDownAtEnd(channelsView, activity.currentFocus, channelCount)
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                // From a channel back to the category it is in (not whichever row is level with
+                // it), so browsing carries on from there, however far down the list it is.
+                if (mobile || activity.currentFocus?.parent !== channelsView || categoryIndex < 0) return false
+                focusCategory(categoryIndex)
+                return true
+            }
             KeyEvent.KEYCODE_CHANNEL_UP -> { zap(+1); return true }
             KeyEvent.KEYCODE_CHANNEL_DOWN -> { zap(-1); return true }
         }
@@ -337,9 +344,20 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         if (channelCount == 0 && cats.shown.size > 1) focusCategory(1) else focusChannel(0)
     }
 
+    /** Focus on category [index]; it may need scrolling into view and laying out first, so a few tries. */
     private fun focusCategory(index: Int) {
-        categoriesView.scrollToPosition(index)
-        categoriesView.post { categoriesView.findViewHolderForAdapterPosition(index)?.itemView?.requestFocus() }
+        val now = categoriesView.findViewHolderForAdapterPosition(index)?.itemView
+        if (now != null && now.isShown) {
+            now.requestFocus()
+            return
+        }
+        (categoriesView.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(index, categoriesView.height / 3)
+        var tries = 0
+        fun attempt() {
+            val v = categoriesView.findViewHolderForAdapterPosition(index)?.itemView
+            if (v != null) v.requestFocus() else if (++tries < 8) categoriesView.postDelayed({ attempt() }, 30)
+        }
+        categoriesView.post { attempt() }
     }
 
     private fun markPlayingCategory() {
