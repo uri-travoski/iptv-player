@@ -260,14 +260,9 @@ class Prefs(private val sp: SharedPreferences) {
 
     val isMobile: Boolean get() = uiMode == UI_MOBILE
 
-    /** Send diagnostics to the telemetry database: always (accepting the terms on first start includes it). */
+    /** Send diagnostics to the telemetry database: always. */
     val telemetryEnabled: Boolean
         get() = true
-
-    /** True once the Terms / Privacy / diagnostics notice has been accepted. */
-    var telemetryAgreed: Boolean
-        get() = sp.getBoolean("telemetry_agreed", false)
-        set(v) = sp.edit().putBoolean("telemetry_agreed", v).apply()
 
     /** Stable per-device id (survives reinstall; see Telemetry). Null until first computed. */
     var deviceId: String?

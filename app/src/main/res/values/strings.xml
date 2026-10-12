@@ -336,9 +336,4 @@
         <item quantity="other">%1$d series</item>
     </plurals>
 
-    <!-- First-run agreement: terms, privacy and diagnostics (one tick) -->
-    <string name="agreement_title">Terms, Privacy &amp; Diagnostics</string>
-    <string name="agreement_body">By continuing you accept the Terms of Use, Privacy Policy and the app collects diagnostic data for troubleshooting.</string>
-    <string name="agreement_accept">I agree</string>
-    <string name="agreement_continue">Continue</string>
 </resources>

@@ -26,7 +26,7 @@ import java.util.UUID
  * so the UI thread and playback never wait on disk or network. Events are written to a bounded
  * on-disk outbox (its own SQLite file) and flushed in batches, so nothing is lost offline.
  *
- * Disabled entirely when Settings > Send diagnostics is off.
+ * Always on (there is no setting).
  */
 class Telemetry(
     private val context: Context,

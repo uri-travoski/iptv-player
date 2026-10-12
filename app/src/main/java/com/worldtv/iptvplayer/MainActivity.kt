@@ -110,11 +110,9 @@ class MainActivity : ComponentActivity() {
      */
     private suspend fun route() {
         val graph = App.graph
-        // First launch: one tick accepts Terms, Privacy and diagnostics (opt-in by default).
-        com.worldtv.iptvplayer.ui.AgreementDialog.showIfNeeded(this)
         var playlists = graph.repo.playlists()
-        // A new install starts with Free TV, the free demo playlist: added and loading from right
-        // after the terms, while the TV / Mobile choice is made. Only once: someone who deletes
+        // A new install starts with Free TV, the free demo playlist: added and loading from the
+        // very start, while the TV / Mobile choice is made. Only once: someone who deletes
         // every playlist gets the add screen instead.
         if (playlists.isEmpty() && !graph.prefs.defaultPlaylistAdded) {
             graph.addDefaultPlaylist()
