@@ -119,6 +119,12 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp" />
 
+            <include
+                layout="@layout/live_guide"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp" />
+
             <View
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
@@ -128,7 +134,7 @@
                 style="@style/Text.Secondary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="OK: play, OK again: full screen · Menu: favourite or group"
+                android:text="@string/live_hint"
                 android:textSize="14sp" />
         </LinearLayout>
     </LinearLayout>

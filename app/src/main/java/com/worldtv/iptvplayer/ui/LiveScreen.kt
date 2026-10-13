@@ -7,6 +7,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.media3.common.C
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -19,18 +20,25 @@ import com.worldtv.iptvplayer.data.repo.EntryRow
 import com.worldtv.iptvplayer.data.repo.Group
 import com.worldtv.iptvplayer.data.repo.Playlist
 import com.worldtv.iptvplayer.data.repo.Repository
+import com.worldtv.iptvplayer.data.source.EpgListing
+import com.worldtv.iptvplayer.data.source.Guide
 import com.worldtv.iptvplayer.data.source.XtreamCredentials
 import com.worldtv.iptvplayer.data.source.XtreamUrls
 import com.worldtv.iptvplayer.player.PlayerController
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Calendar
+import java.util.Date
 
 /**
  * Live TV: categories · channels · preview, like IBO's live screen.
  * OK on a channel plays it in the preview; OK again goes full screen.
  * Full screen: Up/Down or CH+/CH- zap, OK shows the controls, Back steps back one level
  * (controls → full screen → list), always to the same category and channel.
+ * 0 (or the remote's Last / Recall key) flips back to the channel watched before, anywhere here.
+ * Xtream playlists show now / next from the panel's guide under the preview and in the banner,
+ * and catch-up (Menu) on channels the panel records; neither shows where there is none.
  * Mobile layout: preview on top and a sideways category strip; tap = OK, long-press = Menu, a tap
  * on the preview goes full screen (landscape), a tap on the video shows the controls.
  */
@@ -56,10 +64,19 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     private val ctlAspect: ImageView = root.findViewById(R.id.ctl_aspect)
     private val ctlFav: ImageView = root.findViewById(R.id.ctl_fav)
     private val searchField: EditText = root.findViewById(R.id.search)
+    private val guideBox: View = root.findViewById(R.id.guide)
+    private val guideNow: TextView = root.findViewById(R.id.guide_now)
+    private val guideProgress: ProgressBar = root.findViewById(R.id.guide_progress)
+    private val guideNext: TextView = root.findViewById(R.id.guide_next)
+    private val guideCatchup: View = root.findViewById(R.id.guide_catchup)
+    private val bannerGuide: TextView = root.findViewById(R.id.banner_guide)
+    private val bannerProgress: ProgressBar = root.findViewById(R.id.banner_progress)
+    private val bannerNext: TextView = root.findViewById(R.id.banner_next)
+    private val ctlCatchup: View = root.findViewById(R.id.ctl_catchup)
     private val tips = OsdTips(
         root.findViewById(R.id.osd_tip),
         listOf(
-            R.id.ctl_fav, R.id.ctl_audio, R.id.ctl_subs, R.id.ctl_prev, R.id.ctl_pause, R.id.ctl_next, R.id.ctl_aspect, R.id.ctl_external,
+            R.id.ctl_fav, R.id.ctl_audio, R.id.ctl_subs, R.id.ctl_last, R.id.ctl_catchup, R.id.ctl_prev, R.id.ctl_pause, R.id.ctl_next, R.id.ctl_aspect, R.id.ctl_external,
         ).map { root.findViewById<View>(it) },
     )
 
@@ -97,6 +114,31 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     private var listName = ""
     private val searchBox = SearchBox(searchField, scope, ::onSearch, onSubmit = ::onSearchSubmit)
 
+    /** The channel played before this one, and the list it was picked from (0 / Last flips back). */
+    private var previous: Recall? = null
+    /** Guide listings of the playing channel (empty: none, so the guide lines are hidden). */
+    private var guide: List<EpgListing> = emptyList()
+    private var guideJob: Job? = null
+    /** Guides fetched this visit, by channel: zapping back and forth asks the panel only once. */
+    private val guideCache = object : LinkedHashMap<String, Pair<Long, List<EpgListing>>>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, List<EpgListing>>>?) = size > 48
+    }
+    private val timeFormat = android.text.format.DateFormat.getTimeFormat(activity)
+    /** Moves the progress bar on and the next programme up while a channel plays. */
+    private val guideTick = object : Runnable {
+        override fun run() {
+            val row = playingRow
+            val fetched = row?.let { guideCache[it.itemId]?.first } ?: 0
+            // The guide ran out (the panel only sends a few listings): ask again, at most every 5 min.
+            if (row != null && guide.isNotEmpty() && guide.last().stopEpoch <= nowSeconds() && nowSeconds() - fetched >= 5 * 60) {
+                guideCache.remove(row.itemId)
+                loadGuide(row)
+            } else {
+                showGuide()
+            }
+        }
+    }
+
     private val playerListener = object : PlayerController.Listener {
         override fun onState(state: PlayerController.State) {
             val text = when (state) {
@@ -133,6 +175,8 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         root.findViewById<View>(R.id.ctl_subs).setOnClickListener { chooseTrack(C.TRACK_TYPE_TEXT) }
         ctlAspect.setOnClickListener { cycleAspect() }
         ctlFav.setOnClickListener { playingRow?.let { onChannelMenu(playingIndex, it) } }
+        root.findViewById<View>(R.id.ctl_last).setOnClickListener { recallLast() }
+        ctlCatchup.setOnClickListener { playingRow?.let { openCatchup(it) } }
         root.findViewById<View>(R.id.ctl_external).setOnClickListener { openExternal() }
         ctlAspect.contentDescription = activity.getString(PlayerUi.aspectLabel(activity))
         if (mobile) root.findViewById<View>(R.id.osd_top).visibility = View.VISIBLE
@@ -202,6 +246,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY,
                 KeyEvent.KEYCODE_MEDIA_PAUSE -> togglePause()
                 KeyEvent.KEYCODE_MENU -> playingRow?.let { onChannelMenu(playingIndex, it) }
+                KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_LAST_CHANNEL -> recallLast()
                 else -> return false
             }
             return true
@@ -229,6 +274,13 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
             }
             KeyEvent.KEYCODE_CHANNEL_UP -> { zap(+1); return true }
             KeyEvent.KEYCODE_CHANNEL_DOWN -> { zap(-1); return true }
+            KeyEvent.KEYCODE_LAST_CHANNEL -> { recallLast(); return true }
+            KeyEvent.KEYCODE_0 -> {
+                // Not while typing in the search box.
+                if (activity.currentFocus is EditText) return false
+                recallLast()
+                return true
+            }
         }
         return false
     }
@@ -416,6 +468,8 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
     /** [fromCategoryKey]: the list [index] belongs to (the shown one, unless replaying). */
     private fun play(index: Int, row: EntryRow, fromCategoryKey: String? = categoryKey) {
         val url = row.streamUrl ?: urls?.live(row.itemId, liveExt) ?: return
+        val before = playingRow
+        if (before != null && before.itemId != row.itemId) previous = Recall(before, playingCategoryKey)
         playingIndex = index
         playingRow = row
         // Mark the category this channel was picked from.
@@ -424,6 +478,7 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         channelAdapter.playingItemId = row.itemId
         nowName.text = row.name
         graph.player.play(url)
+        loadGuide(row)
         playlist?.let { graph.watch.start(it.id, row.itemId, row.name) }
         graph.telemetry.event(
             "playback",
@@ -486,37 +541,198 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
             val groups = graph.repo.groups(p.id)
             val fav = graph.repo.isFavourite(p.id, ContentType.LIVE, row.itemId)
             val inGroups = graph.repo.groupsOf(row.itemId, groups.map { it.id })
-            val labels = ArrayList<String>()
-            labels += activity.getString(if (fav) R.string.group_remove_from else R.string.group_add_to, activity.getString(R.string.favourites))
-            groups.forEach { labels += activity.getString(if (it.id in inGroups) R.string.group_remove_from else R.string.group_add_to, it.name) }
-            labels += activity.getString(R.string.group_new_with)
+            val actions = ArrayList<Pair<String, () -> Unit>>()
+            // Catch-up first, and only on channels with programmes to watch again.
+            if (recorded(row)) guideFor(row)
+            if (hasCatchup(row)) actions += activity.getString(R.string.catchup_menu) to { openCatchup(row) }
+            actions += activity.getString(if (fav) R.string.group_remove_from else R.string.group_add_to, activity.getString(R.string.favourites)) to
+                { toggleFavourite(index, row) }
+            groups.forEach { g ->
+                val add = g.id !in inGroups
+                actions += activity.getString(if (add) R.string.group_add_to else R.string.group_remove_from, g.name) to {
+                    scope.launch {
+                        graph.repo.setInGroup(g.id, row.itemId, add)
+                        activity.toast(activity.getString(if (add) R.string.group_added else R.string.group_removed, g.name))
+                        if (categoryKey == Repository.groupKey(g.id) && !fullscreen) selectCategory(categoryIndex)
+                    }
+                    Unit
+                }
+            }
+            actions += activity.getString(R.string.group_new_with) to { askGroupName(null, withChannel = row) }
             // In the Most watched list (not in full screen): take it out, last in the menu.
-            val forget = categoryKey == Repository.KEY_MOST_WATCHED && !fullscreen
-            if (forget) labels += activity.getString(R.string.most_watched_remove)
-            val newIndex = labels.size - 1 - (if (forget) 1 else 0)
+            if (categoryKey == Repository.KEY_MOST_WATCHED && !fullscreen) {
+                actions += activity.getString(R.string.most_watched_remove) to {
+                    scope.launch {
+                        graph.repo.forgetWatched(p.id, row.itemId)
+                        activity.toast(activity.getString(R.string.most_watched_removed))
+                        selectCategory(categoryIndex)
+                    }
+                    Unit
+                }
+            }
             // In full screen the controls stay up while the menu is open.
             handler.removeCallbacks(hideBanner)
             android.app.AlertDialog.Builder(activity)
                 .setTitle(row.name)
+                .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions[which].second() }
+                .setOnDismissListener { if (fullscreen && controls.visibility == View.VISIBLE) scheduleHide() }
+                .show()
+        }
+    }
+
+    // ---- last channel ----
+
+    private class Recall(val row: EntryRow, val categoryKey: String?)
+
+    /** Back to the channel watched before, in the list it was picked from (when that is still listed). */
+    private fun recallLast() {
+        val prev = previous
+        val p = playlist ?: return
+        if (prev == null) {
+            activity.toast(activity.getString(R.string.last_channel_none))
+            return
+        }
+        scope.launch {
+            val key = prev.categoryKey
+            if (key != null && key != categoryKey) {
+                val i = cats.indexOf(key)
+                if (i >= 0) {
+                    pendingCategory?.cancel()
+                    selectCategory(i)
+                    if (!fullscreen) categoriesView.scrollToPosition(i)
+                }
+            }
+            val index = graph.repo.indexOf(p.id, ContentType.LIVE, categoryKey, prev.row.itemId, liveSort)
+            play(index, prev.row)
+            if (!fullscreen && index >= 0) focusChannel(index)
+        }
+    }
+
+    // ---- guide: now / next and catch-up ----
+
+    private fun nowSeconds() = System.currentTimeMillis() / 1000
+
+    /** The panel says it records [row] (Xtream only: that is where the timeshift links are known). */
+    private fun recorded(row: EntryRow?) = row != null && row.catchupDays > 0 && urls != null
+
+    /**
+     * Catch-up is offered only where it works: a recorded channel whose guide (already fetched)
+     * has at least one programme to watch again. A channel flagged as recorded with nothing in
+     * it shows no catch-up at all.
+     */
+    private fun hasCatchup(row: EntryRow?) =
+        recorded(row) && Guide.catchup(guideCache[row!!.itemId]?.second.orEmpty(), nowSeconds(), row.catchupDays).isNotEmpty()
+
+    /** This visit's guide for [row] when still fresh, else from the panel (and kept). */
+    private suspend fun guideFor(row: EntryRow): List<EpgListing> {
+        val p = playlist ?: return emptyList()
+        val now = nowSeconds()
+        val cached = guideCache[row.itemId]
+        if (cached != null && now - cached.first < 10 * 60 && (cached.second.isEmpty() || cached.second.last().stopEpoch > now)) return cached.second
+        // Recorded channels: the whole table (past programmes too, for catch-up; now / next come
+        // from it as well). Others: just the next few listings.
+        val list = if (recorded(row)) graph.syncer.fullEpg(p, row.itemId) else graph.syncer.shortEpg(p, row.itemId)
+        guideCache[row.itemId] = nowSeconds() to list
+        return list
+    }
+
+    /**
+     * The playing channel's guide: from this visit's cache, else one small request (get_short_epg),
+     * a moment after the channel starts so zapping through doesn't ask for every channel passed.
+     */
+    private fun loadGuide(row: EntryRow) {
+        guideJob?.cancel()
+        guide = emptyList()
+        showGuide()
+        if (urls == null) return // M3U: no per-channel guide to ask for
+        guideJob = scope.launch {
+            if (guideCache[row.itemId] == null) delay(400)
+            val list = guideFor(row)
+            if (playingRow?.itemId != row.itemId) return@launch
+            guide = list
+            showGuide()
+        }
+    }
+
+    /** Fills (or hides) the guide lines under the preview and in the banner, and keeps them current. */
+    private fun showGuide() {
+        handler.removeCallbacks(guideTick)
+        val now = nowSeconds()
+        val (on, next) = Guide.nowNext(guide, now)
+        val catchup = hasCatchup(playingRow)
+        val nowText = on?.let { activity.getString(R.string.guide_now, "${time(it.startEpoch)}–${time(it.stopEpoch)}", it.title) }
+        val nextText = next?.let { activity.getString(R.string.guide_next, time(it.startEpoch), it.title) }
+        val progress = on?.let { ((now - it.startEpoch) * 1000 / (it.stopEpoch - it.startEpoch)).toInt().coerceIn(0, 1000) }
+
+        guideNow.text = nowText
+        guideNow.visibility = if (nowText != null) View.VISIBLE else View.GONE
+        guideProgress.progress = progress ?: 0
+        guideProgress.visibility = if (progress != null) View.VISIBLE else View.GONE
+        guideNext.text = nextText
+        guideNext.visibility = if (nextText != null) View.VISIBLE else View.GONE
+        guideCatchup.visibility = if (catchup && !mobile) View.VISIBLE else View.GONE
+        guideBox.visibility = if (nowText != null || nextText != null || guideCatchup.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+
+        bannerGuide.text = nowText
+        bannerGuide.visibility = guideNow.visibility
+        bannerProgress.progress = progress ?: 0
+        bannerProgress.visibility = guideProgress.visibility
+        bannerNext.text = nextText
+        bannerNext.visibility = guideNext.visibility
+        ctlCatchup.visibility = if (catchup) View.VISIBLE else View.GONE
+
+        // Every 30 s while there is a guide: the bar moves on and, at the end, the next one is "now".
+        if (guide.isNotEmpty()) handler.postDelayed(guideTick, 30_000)
+    }
+
+    private fun time(epoch: Long): String = timeFormat.format(Date(epoch * 1000))
+
+    /** Today / Yesterday / "Mon 12 Oct" for the catch-up list. */
+    private fun day(epoch: Long): String {
+        val c = Calendar.getInstance().apply { timeInMillis = epoch * 1000 }
+        val today = Calendar.getInstance()
+        fun sameDay(a: Calendar, b: Calendar) = a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
+        if (sameDay(c, today)) return activity.getString(R.string.catchup_today)
+        today.add(Calendar.DAY_OF_YEAR, -1)
+        if (sameDay(c, today)) return activity.getString(R.string.catchup_yesterday)
+        return android.text.format.DateFormat.format("EEE d MMM", c).toString()
+    }
+
+    /**
+     * Earlier programmes of [row] the panel has recorded, newest first; one plays in the movie
+     * player (seekable). When there are none right now it says so instead of an empty list.
+     */
+    private fun openCatchup(row: EntryRow) {
+        val p = playlist ?: return
+        if (!recorded(row)) return
+        val u = urls ?: return
+        handler.removeCallbacks(hideBanner)
+        scope.launch {
+            val list = Guide.catchup(guideFor(row), nowSeconds(), row.catchupDays)
+            if (list.isEmpty()) {
+                activity.toast(activity.getString(R.string.catchup_none))
+                if (fullscreen && controls.visibility == View.VISIBLE) scheduleHide()
+                return@launch
+            }
+            val labels = list.map { "${day(it.startEpoch)}  ${time(it.startEpoch)}   ${it.title}" }
+            android.app.AlertDialog.Builder(activity)
+                .setTitle(activity.getString(R.string.catchup_title, row.name))
                 .setItems(labels.toTypedArray()) { _, which ->
-                    when (which) {
-                        0 -> toggleFavourite(index, row)
-                        newIndex -> askGroupName(null, withChannel = row)
-                        newIndex + 1 -> scope.launch {
-                            graph.repo.forgetWatched(p.id, row.itemId)
-                            activity.toast(activity.getString(R.string.most_watched_removed))
-                            selectCategory(categoryIndex)
-                        }
-                        else -> {
-                            val g = groups[which - 1]
-                            val add = g.id !in inGroups
-                            scope.launch {
-                                graph.repo.setInGroup(g.id, row.itemId, add)
-                                activity.toast(activity.getString(if (add) R.string.group_added else R.string.group_removed, g.name))
-                                if (categoryKey == Repository.groupKey(g.id) && !fullscreen) selectCategory(categoryIndex)
-                            }
-                        }
-                    }
+                    val e = list[which]
+                    val url = u.timeshift(row.itemId, Guide.timeshiftStart(e.startEpoch, p.serverTz), Guide.minutes(e), liveExt)
+                    graph.telemetry.event(
+                        "playback",
+                        "catchup",
+                        mapOf(
+                            "content_type" to "live",
+                            "item_id" to row.itemId,
+                            "item_name" to row.name,
+                            "programme" to e.title,
+                            "programme_start" to e.startEpoch,
+                            "duration_min" to Guide.minutes(e),
+                        ),
+                    )
+                    activity.push(PlayerScreen(activity, listOf(PlayItem(url, "${row.name} · ${e.title}")), 0))
                 }
                 .setOnDismissListener { if (fullscreen && controls.visibility == View.VISIBLE) scheduleHide() }
                 .show()

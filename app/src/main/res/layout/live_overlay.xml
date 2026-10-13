@@ -57,6 +57,38 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp" />
 
+            <!-- Now / next from the guide; hidden when there is none. -->
+            <TextView
+                android:id="@+id/banner_guide"
+                style="@style/Text.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/banner_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_marginTop="6dp"
+                android:max="1000"
+                android:progressBackgroundTint="@color/divider"
+                android:progressTint="@color/accent"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/banner_next"
+                style="@style/Text.Secondary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:visibility="gone" />
+
             <!-- Left/Right to move, OK to press; Up/Down still change channel. -->
             <LinearLayout
                 android:id="@+id/controls"
@@ -70,6 +102,8 @@
                 <ImageView android:id="@+id/ctl_fav" style="@style/OsdIcon" android:contentDescription="@string/ctl_fav_add" android:src="@drawable/ic_star_border" />
                 <ImageView android:id="@+id/ctl_audio" style="@style/OsdIcon" android:contentDescription="@string/ctl_audio" android:src="@drawable/ic_audiotrack" />
                 <ImageView android:id="@+id/ctl_subs" style="@style/OsdIcon" android:contentDescription="@string/ctl_subs" android:src="@drawable/ic_subtitles" />
+                <ImageView android:id="@+id/ctl_last" style="@style/OsdIcon" android:contentDescription="@string/ctl_last" android:src="@drawable/ic_swap" />
+                <ImageView android:id="@+id/ctl_catchup" style="@style/OsdIcon" android:contentDescription="@string/ctl_catchup" android:src="@drawable/ic_replay" android:visibility="gone" />
 
                 <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 

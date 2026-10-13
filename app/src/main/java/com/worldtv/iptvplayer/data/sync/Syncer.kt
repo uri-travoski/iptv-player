@@ -10,6 +10,7 @@ import com.worldtv.iptvplayer.data.model.Entry
 import com.worldtv.iptvplayer.data.repo.Playlist
 import com.worldtv.iptvplayer.data.repo.Repository
 import com.worldtv.iptvplayer.data.source.AdultNames
+import com.worldtv.iptvplayer.data.source.EpgListing
 import com.worldtv.iptvplayer.data.source.Episode
 import com.worldtv.iptvplayer.data.source.M3uParser
 import com.worldtv.iptvplayer.data.source.VodInfo
@@ -69,6 +70,35 @@ class Syncer(
         }
         episodes.sortWith(compareBy({ it.season }, { it.number }))
         info to episodes
+    }
+
+    /**
+     * Now and next for one live channel (get_short_epg), fetched when the channel plays, never
+     * stored. Empty when the panel has no guide for it (or serves none at all: some answer an
+     * empty body).
+     */
+    suspend fun shortEpg(p: Playlist, streamId: String, limit: Int = 4): List<EpgListing> = withContext(io) {
+        guide(xtreamUrls(p).api(XtreamAction.SHORT_EPG, "stream_id" to streamId, "limit" to limit.toString()))
+    }
+
+    /** Every listing the panel keeps for one channel (get_simple_data_table): catch-up picks from these. */
+    suspend fun fullEpg(p: Playlist, streamId: String): List<EpgListing> = withContext(io) {
+        guide(xtreamUrls(p).api(XtreamAction.SIMPLE_DATA_TABLE, "stream_id" to streamId))
+    }
+
+    private fun guide(url: String): List<EpgListing> {
+        val out = ArrayList<EpgListing>()
+        try {
+            get(url) { XtreamParser.parseEpg(it) { e -> out += e } }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // No guide (an error, an empty or odd answer, no network) is not worth a message:
+            // the guide lines just stay hidden.
+            android.util.Log.i("WorldTV", "guide: ${e.message}")
+        }
+        out.sortBy { it.startEpoch }
+        return out
     }
 
     private fun xtreamUrls(p: Playlist) = XtreamUrls(XtreamCredentials(p.url, p.username.orEmpty(), p.password.orEmpty()))

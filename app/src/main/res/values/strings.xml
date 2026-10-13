@@ -148,6 +148,20 @@
     <string name="no_playlist_yet">Add a playlist first</string>
 
     <string name="ctl_external">Open in…</string>
+    <string name="ctl_last">Last channel (0)</string>
+    <string name="ctl_catchup">Catch-up: earlier programmes</string>
+
+    <!-- Live guide: now / next under the preview and in the full-screen banner -->
+    <string name="live_hint">OK: play, OK again: full screen · Menu: favourite or group · 0: last channel</string>
+    <string name="guide_now">Now  %1$s  %2$s</string>
+    <string name="guide_next">Next  %1$s  %2$s</string>
+    <string name="catchup_hint">⟲ Catch-up: Menu (long-press) to watch earlier programmes</string>
+    <string name="catchup_menu">⟲ Catch-up: earlier programmes</string>
+    <string name="catchup_title">Catch-up · %s</string>
+    <string name="catchup_none">No earlier programmes are available on this channel right now.</string>
+    <string name="catchup_today">Today</string>
+    <string name="catchup_yesterday">Yesterday</string>
+    <string name="last_channel_none">No previous channel yet</string>
     <string name="open_with">Open with</string>
     <string name="no_external_player">No other video player is installed. Install VLC from the Play Store.</string>
     <string name="audio_unsupported">This channel\'s sound format can\'t be played on this box. Press OK, then “Open in…” to use another player.</string>
