@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme colours (App Settings > Theme). Layouts and drawables use these, never @color. -->
+    <attr name="wtBackground" format="reference|color" />
+    <attr name="wtBar" format="reference|color" />
+    <attr name="wtSurface" format="color" />
+    <attr name="wtSurfaceActive" format="color" />
+    <attr name="wtSlot" format="color" />
+    <attr name="wtStroke" format="color" />
+    <attr name="wtDivider" format="color" />
+    <attr name="wtAccent" format="color" />
+    <attr name="wtPressed" format="color" />
+    <attr name="wtTextPrimary" format="color" />
+    <attr name="wtTextSecondary" format="color" />
+    <attr name="wtScrim" format="color" />
+</resources>

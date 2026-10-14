@@ -16,7 +16,7 @@
         android:layout_height="wrap_content"
         android:gravity="end"
         android:maxLines="1"
-        android:textColor="@color/text_secondary"
+        android:textColor="?attr/wtTextSecondary"
         android:textSize="16sp" />
 
     <ImageView
@@ -35,7 +35,7 @@
         android:layout_weight="1"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="@color/text_primary"
+        android:textColor="?attr/wtTextPrimary"
         android:textSize="18sp" />
 
     <!-- Channel check: shown on channels that worked when last checked. -->

@@ -53,7 +53,7 @@ class FirstLoadScreen(activity: MainActivity) : Screen(activity) {
         waiting?.cancel()
         spinner.visibility = View.VISIBLE
         buttons.visibility = View.GONE
-        status.setTextColor(activity.getColor(R.color.text_secondary))
+        status.setTextColor(activity.themeColor(R.attr.wtTextSecondary))
         activity.keepScreenOn(true) // a sleeping phone drops the connection
         waiting = scope.launch {
             val progress = launch { graph.firstLoadProgress.collect { status.text = it } }

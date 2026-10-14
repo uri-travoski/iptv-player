@@ -140,7 +140,7 @@ class AdultWordsScreen(activity: MainActivity) : Screen(activity) {
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             holder.text.text = "✕   " + words[position]
-            holder.text.setTextColor(activity.getColor(R.color.text_primary))
+            holder.text.setTextColor(activity.themeColor(R.attr.wtTextPrimary))
         }
 
         inner class VH(val text: TextView) : RecyclerView.ViewHolder(text) {

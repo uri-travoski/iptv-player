@@ -265,6 +265,13 @@
     <string name="refresh_every_start_long">Update live, movies &amp; series every time WorldTV starts</string>
     <string name="refresh_daily_long">Update live, movies &amp; series every day at 3 am (recommended)</string>
     <string name="refresh_2_days_long">Update live, movies &amp; series every 2 days at 3 am</string>
+    <string name="home_menu">Menu</string>
+    <string name="add_app_home">Add app to home screen</string>
+    <string name="slots_full">The home screen already has the most apps it can show (14)</string>
+    <string name="theme_title">Theme</string>
+    <string name="theme_classic">Classic (maroon)</string>
+    <string name="theme_glass">Glass</string>
+    <string name="theme_showtime">Showtime (colourful)</string>
     <string name="check_title">Channel check</string>
     <string name="check_status_running">%1$s checked · %2$s so far</string>
     <string name="check_status_paused">%1$s checked · %2$s so far · goes on when idle</string>

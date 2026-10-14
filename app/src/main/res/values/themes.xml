@@ -1,9 +1,60 @@
 <resources>
-    <!-- Framework theme: no AppCompat or Material Components, to keep the APK small. -->
+    <!-- Framework theme: no AppCompat or Material Components, to keep the APK small.
+         Classic: dark maroon (the original look). -->
     <style name="Theme.IptvPlayer" parent="android:Theme.Material.NoActionBar.Fullscreen">
         <item name="android:windowBackground">@color/background</item>
         <item name="android:colorBackground">@color/background</item>
         <item name="android:colorAccent">@color/accent</item>
         <item name="android:windowContentOverlay">@null</item>
+        <item name="wtBackground">@color/background</item>
+        <item name="wtBar">@color/background</item>
+        <item name="wtSurface">@color/surface</item>
+        <item name="wtSurfaceActive">@color/surface_active</item>
+        <item name="wtSlot">#803F111C</item>
+        <item name="wtStroke">#00000000</item>
+        <item name="wtDivider">@color/divider</item>
+        <item name="wtAccent">@color/accent</item>
+        <item name="wtPressed">@color/pressed</item>
+        <item name="wtTextPrimary">@color/text_primary</item>
+        <item name="wtTextSecondary">@color/text_secondary</item>
+        <item name="wtScrim">@color/scrim</item>
+    </style>
+
+    <!-- Glass: frosted see-through panels with light edges over a deep blue-violet gradient. -->
+    <style name="Theme.IptvPlayer.Glass">
+        <item name="android:windowBackground">@drawable/bg_theme_glass</item>
+        <item name="android:colorBackground">#FF101C3A</item>
+        <item name="android:colorAccent">#FF5CC8FF</item>
+        <item name="wtBackground">@drawable/bg_theme_glass</item>
+        <item name="wtBar">#00000000</item>
+        <item name="wtSurface">#26FFFFFF</item>
+        <item name="wtSurfaceActive">#40FFFFFF</item>
+        <item name="wtSlot">#1AFFFFFF</item>
+        <item name="wtStroke">#40FFFFFF</item>
+        <item name="wtDivider">#33FFFFFF</item>
+        <item name="wtAccent">#FF2F9BE0</item>
+        <item name="wtPressed">#FF7CD3FF</item>
+        <item name="wtTextPrimary">#FFFFFFFF</item>
+        <item name="wtTextSecondary">#CCDCE6F5</item>
+        <item name="wtScrim">#D90B1630</item>
+    </style>
+
+    <!-- Showtime: entertainment colours, deep indigo-violet with an orange spotlight. -->
+    <style name="Theme.IptvPlayer.Showtime">
+        <item name="android:windowBackground">@drawable/bg_theme_showtime</item>
+        <item name="android:colorBackground">#FF160B3A</item>
+        <item name="android:colorAccent">#FFFF8A1F</item>
+        <item name="wtBackground">@drawable/bg_theme_showtime</item>
+        <item name="wtBar">#00000000</item>
+        <item name="wtSurface">#FF2B1B66</item>
+        <item name="wtSurfaceActive">#FF40298F</item>
+        <item name="wtSlot">#992B1B66</item>
+        <item name="wtStroke">#00000000</item>
+        <item name="wtDivider">#FF3D2C85</item>
+        <item name="wtAccent">#FFFF7A00</item>
+        <item name="wtPressed">#FFFFB347</item>
+        <item name="wtTextPrimary">#FFFFFFFF</item>
+        <item name="wtTextSecondary">#FFC9C0F2</item>
+        <item name="wtScrim">#D9120830</item>
     </style>
 </resources>

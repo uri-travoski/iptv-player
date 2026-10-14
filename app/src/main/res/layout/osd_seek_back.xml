@@ -11,7 +11,7 @@
         android:duplicateParentState="true"
         android:importantForAccessibility="no"
         android:src="@drawable/ic_replay"
-        android:tint="@color/text_primary" />
+        android:tint="?attr/wtTextPrimary" />
 
     <TextView style="@style/OsdSeekNumber" android:text="10" />
 </FrameLayout>

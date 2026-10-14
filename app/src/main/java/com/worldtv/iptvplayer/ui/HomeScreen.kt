@@ -17,12 +17,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Live TV · Movies · Series on top. Below, rows of 5: the first holds the user's first app and,
- * always on the right, Reload playlist, App Settings, All apps and System settings; more apps
- * (1..14 slots, set in App Settings) continue in rows of 5 underneath. The big tiles shrink to
- * fit; extra rows scroll into view on focus.
+ * Live TV · Movies · Series, with small Reload playlist and menu (⋮) icons top right; the menu
+ * holds App Settings, All apps and System settings (TV: also Add app to home screen). Below, the
+ * user's own apps in rows of 5, only when some are added (App Settings > Home app slots, none
+ * by default): no empty "+" slots. The big tiles shrink to fit; extra rows scroll in on focus.
  * WorldTV can be the box's launcher, so focus comes back to the tile the user left from.
- * Mobile layout: the three tiles stacked, then only Reload playlist and App Settings.
  */
 class HomeScreen(activity: MainActivity) : Screen(activity) {
 
@@ -35,11 +34,12 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     private val scroll: View = root.findViewById(R.id.home_scroll)
     private val busy: View = root.findViewById(R.id.busy)
     private val reloadStatus: TextView = root.findViewById(R.id.reload_status)
+    private val reloadIcon: View = root.findViewById(R.id.home_reload)
+    private val menuIcon: View = root.findViewById(R.id.home_menu)
     private var reloading = false
 
-    /** Slot views in order, rebuilt when the slot count changes. */
-    private var slots: List<View> = emptyList()
-    private var builtCount = -1
+    /** App tiles shown (slot index → view), rebuilt whenever the apps may have changed. */
+    private var slots: List<Pair<Int, View>> = emptyList()
     /** Tag of the tile that had focus when the screen was left (another app, a sub-screen). */
     private var lastFocusTag: String? = null
 
@@ -51,6 +51,12 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         bigTiles[1].setOnClickListener { withPlaylist { activity.push(VodScreen(activity, ContentType.MOVIE)) } }
         bigTiles[2].setOnClickListener { withPlaylist { activity.push(VodScreen(activity, ContentType.SERIES)) } }
         if (mobile) bigTiles.forEach { shrinkIcon(it as TextView) }
+        reloadIcon.tag = "reload"
+        menuIcon.tag = "menu"
+        reloadIcon.setOnClickListener { reloadPlaylist() }
+        menuIcon.setOnClickListener { showMenu() }
+        // Up from the big tiles reaches the icons top right.
+        bigTiles.forEach { it.nextFocusUpId = reloadIcon.id }
         val version = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName
         root.findViewById<TextView>(R.id.version).text = activity.getString(R.string.version_label, version)
     }
@@ -58,8 +64,6 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     override fun onShown() {
         activity.hideVideo()
         graph.player.stop()
-        val count = graph.prefs.appSlotCount
-        if (count != builtCount) buildRows(count)
         // Back to where the user was (e.g. the app slot they opened), else Live TV.
         (lastFocusTag?.let { root.findViewWithTag<View>(it) } ?: live).requestFocus()
         scope.launch { showAccount() }
@@ -98,41 +102,25 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         tile.setCompoundDrawablesRelative(icon, null, null, null)
     }
 
-    private fun buildRows(count: Int) {
-        builtCount = count
+    /** The app tiles, rows of 5 (TV only). [apps]: slot index and its app, in order. */
+    private fun buildRows(apps: List<Pair<Int, LaunchableApp>>) {
+        val focusedTag = (activity.currentFocus?.tag as? String)?.takeIf { activity.currentFocus?.let(::isInside) == true }
         rows.removeAllViews()
-        if (mobile) {
-            val row = newRow(0)
-            addFixed(row, 0, "reload", R.drawable.ic_refresh, R.string.reload_playlist) { reloadPlaylist() }
-            addFixed(row, 1, "settings", R.drawable.ic_settings_small, R.string.settings) { activity.push(SettingsScreen(activity)) }
-            slots = emptyList()
-            slotApps = emptyList()
-            return
-        }
-        val list = ArrayList<View>()
-        // First row: the user's first app, then the four fixed tiles, always on the right.
-        val first = newRow(0)
-        list += addSlot(first, 0, 0)
-        addFixed(first, 1, "reload", R.drawable.ic_refresh, R.string.reload_playlist) { reloadPlaylist() }
-        addFixed(first, 2, "settings", R.drawable.ic_settings_small, R.string.settings) { activity.push(SettingsScreen(activity)) }
-        addFixed(first, 3, "allapps", R.drawable.ic_all_apps, R.string.all_apps) { showAllApps() }
-        addFixed(first, 4, "system", R.drawable.ic_android_settings, R.string.android_settings_short) { Apps.openAndroidSettings(activity) }
-        // Any more apps: rows of 5 underneath.
-        val more = count - 1
-        val moreRows = (more + COLUMNS - 1) / COLUMNS
-        for (r in 0 until moreRows) {
-            val row = newRow(r + 1)
+        val list = ArrayList<Pair<Int, View>>()
+        val rowCount = (apps.size + COLUMNS - 1) / COLUMNS
+        for (r in 0 until rowCount) {
+            val row = newRow(r)
             for (col in 0 until COLUMNS) {
-                val index = 1 + r * COLUMNS + col
-                if (index < count) list += addSlot(row, col, index) else addSpace(row, col)
+                val k = r * COLUMNS + col
+                if (k < apps.size) list += apps[k].first to addSlot(row, col, apps[k].first, apps[k].second) else addSpace(row, col)
             }
         }
         slots = list
-        slotApps = emptyList() // filled by showSlots()
-
-        // Down from any big tile goes to the first app slot, not the one under it.
-        bigTiles.forEach { it.nextFocusDownId = list.first().id }
-        fitBigTiles(1 + moreRows)
+        // Down from any big tile goes to the first app (when there is one).
+        bigTiles.forEach { it.nextFocusDownId = list.firstOrNull()?.second?.id ?: View.NO_ID }
+        rows.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
+        fitBigTiles(rowCount)
+        focusedTag?.let { tag -> root.findViewWithTag<View>(tag)?.requestFocus() }
     }
 
     private fun newRow(index: Int): LinearLayout {
@@ -146,12 +134,12 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
 
     /**
      * Big tiles take what's left after the rows: 250dp when there is room, down to 170dp. Only if
-     * even that doesn't fit (small screens with many slots) does the area scroll.
+     * even that doesn't fit (small screens with many apps) does the area scroll.
      */
     private fun fitBigTiles(rowCount: Int) {
         scroll.post {
-            val rowsHeight = rowCount * dp(CELL_HEIGHT) + (rowCount - 1) * dp(ROW_GAP) + dp(24 + 16)
-            val target = (scroll.height - rowsHeight).coerceIn(dp(170), dp(250))
+            val rowsHeight = if (rowCount == 0) 0 else rowCount * dp(CELL_HEIGHT) + (rowCount - 1) * dp(ROW_GAP) + dp(24 + 16)
+            val target = (scroll.height - rowsHeight).coerceIn(dp(170), dp(if (rowCount == 0) 300 else 250))
             val top = if (target < dp(220)) dp(20) else dp(44) // keeps icon + label centred
             bigTiles.forEach {
                 it.layoutParams = it.layoutParams.apply { height = target }
@@ -170,31 +158,48 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         row.addView(Space(activity), cellParams(col))
     }
 
-    private fun addSlot(row: LinearLayout, col: Int, index: Int): View {
+    private fun addSlot(row: LinearLayout, col: Int, index: Int, app: LaunchableApp): View {
         val v = inflater.inflate(R.layout.row_app_slot, row, false)
         v.id = View.generateViewId()
         v.tag = "slot:$index"
-        v.setOnClickListener { onSlotClicked(index) }
-        v.setOnLongClickListener { slotMenu(index); true }
+        v.setOnClickListener { Apps.launch(activity, app.pkg) }
+        v.setOnLongClickListener { slotMenu(index, app); true }
         v.setOnKeyListener { _, keyCode, event ->
-            if (keyCode == KeyEvent.KEYCODE_MENU && event.action == KeyEvent.ACTION_DOWN) { slotMenu(index); true } else false
+            if (keyCode == KeyEvent.KEYCODE_MENU && event.action == KeyEvent.ACTION_DOWN) { slotMenu(index, app); true } else false
         }
+        val icon = v.findViewById<ImageView>(R.id.app_icon)
+        val label = v.findViewById<TextView>(R.id.app_label)
+        icon.imageTintList = null
+        if (app.banner != null) {
+            // TV banners already carry the app's name.
+            icon.setImageDrawable(app.banner)
+            label.visibility = View.GONE
+        } else {
+            icon.setImageDrawable(app.icon)
+            label.text = app.label
+        }
+        v.contentDescription = app.label
         row.addView(v, cellParams(col))
         return v
     }
 
-    private fun addFixed(row: LinearLayout, col: Int, tag: String, icon: Int, label: Int, onClick: () -> Unit) {
-        val v = inflater.inflate(R.layout.row_app_slot, row, false)
-        v.id = View.generateViewId()
-        v.tag = tag
-        v.findViewById<ImageView>(R.id.app_icon).apply {
-            setImageResource(icon)
-            imageTintList = activity.getColorStateList(R.color.slot_content)
+    /** ⋮ top right: App Settings, All apps, System settings (TV: and adding an app to this screen). */
+    private fun showMenu() {
+        val menu = android.widget.PopupMenu(activity, menuIcon)
+        menu.menu.add(0, 1, 0, R.string.settings)
+        if (!mobile) menu.menu.add(0, 4, 1, R.string.add_app_home)
+        menu.menu.add(0, 2, 2, R.string.all_apps)
+        menu.menu.add(0, 3, 3, R.string.android_settings_short)
+        menu.setOnMenuItemClickListener {
+            when (it.itemId) {
+                1 -> activity.push(SettingsScreen(activity))
+                2 -> showAllApps()
+                3 -> Apps.openAndroidSettings(activity)
+                4 -> addApp()
+            }
+            true
         }
-        v.findViewById<TextView>(R.id.app_label).setText(label)
-        v.contentDescription = activity.getString(label)
-        v.setOnClickListener { onClick() }
-        row.addView(v, cellParams(col))
+        menu.show()
     }
 
     /** Opens a library, or the playlist screens first if there is no playlist yet. */
@@ -211,52 +216,17 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
 
     // ---- app slots ----
 
-    private var slotApps: List<LaunchableApp?> = emptyList()
-
+    /** The slots that hold an installed app, loaded off the UI thread (icons and banners come from disk). */
     private suspend fun showSlots() {
-        val views = slots
-        val packages = List(views.size) { graph.prefs.appSlot(it) }
-        // Icons and banners come from disk: load them off the UI thread.
-        val apps = withContext(graph.io) { packages.map { pkg -> pkg?.let { Apps.info(activity, it) } } }
-        if (views !== slots) return // rows rebuilt meanwhile; that rebuild loads its own
-        slotApps = apps
-        views.forEachIndexed { i, v ->
-            val icon = v.findViewById<ImageView>(R.id.app_icon)
-            val label = v.findViewById<TextView>(R.id.app_label)
-            val app = slotApps[i]
-            when {
-                app == null -> {
-                    icon.setImageResource(R.drawable.ic_add)
-                    icon.imageTintList = activity.getColorStateList(R.color.slot_content)
-                    label.setText(R.string.add_app)
-                    label.visibility = View.VISIBLE
-                }
-                app.banner != null -> {
-                    // TV banners already carry the app's name.
-                    icon.imageTintList = null
-                    icon.setImageDrawable(app.banner)
-                    label.visibility = View.GONE
-                }
-                else -> {
-                    icon.imageTintList = null
-                    icon.setImageDrawable(app.icon)
-                    label.text = app.label
-                    label.visibility = View.VISIBLE
-                }
-            }
-            v.contentDescription = app?.label ?: activity.getString(R.string.add_app)
+        if (mobile) return
+        val count = graph.prefs.appSlotCount
+        val apps = withContext(graph.io) {
+            (0 until count).mapNotNull { i -> graph.prefs.appSlot(i)?.let { pkg -> Apps.info(activity, pkg)?.let { i to it } } }
         }
+        buildRows(apps)
     }
 
-    private fun onSlotClicked(i: Int) {
-        if (slotApps.isEmpty()) return // still loading the slot's app
-        val app = slotApps.getOrNull(i)
-        if (app != null) Apps.launch(activity, app.pkg) else chooseApp(i)
-    }
-
-    private fun slotMenu(i: Int) {
-        if (slotApps.isEmpty()) return
-        val app = slotApps.getOrNull(i) ?: return chooseApp(i)
+    private fun slotMenu(i: Int, app: LaunchableApp) {
         AlertDialog.Builder(activity)
             .setTitle(app.label)
             .setItems(arrayOf(activity.getString(R.string.slot_change), activity.getString(R.string.slot_remove))) { _, which ->
@@ -268,6 +238,15 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
                 }
             }
             .show()
+    }
+
+    /** Menu > Add app to home screen: into the first free slot, adding one if they are all used. */
+    private fun addApp() {
+        val prefs = graph.prefs
+        val free = (0 until prefs.appSlotCount).firstOrNull { prefs.appSlot(it) == null }
+        val index = free ?: prefs.appSlotCount
+        if (index >= com.worldtv.iptvplayer.Prefs.MAX_SLOTS) return activity.toast(activity.getString(R.string.slots_full))
+        chooseApp(index)
     }
 
     /** Every installed app; OK opens it. */
@@ -283,6 +262,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
             val apps = withContext(graph.io) { Apps.list(activity) }
             Apps.pick(activity, R.string.choose_app, apps) { app ->
                 graph.prefs.setAppSlot(i, app.pkg)
+                if (i >= graph.prefs.appSlotCount) graph.prefs.appSlotCount = i + 1
                 scope.launch { showSlots() }
             }
         }
@@ -323,7 +303,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         graph.syncing = true
         activity.keepScreenOn(true) // a phone that sleeps mid-reload drops the connection
         busy.visibility = View.VISIBLE
-        reloadStatus.setTextColor(activity.getColor(R.color.text_secondary))
+        reloadStatus.setTextColor(activity.themeColor(R.attr.wtTextSecondary))
         reloadStatus.setText(if (auto) R.string.auto_refreshing else R.string.reloading)
         // App-wide, not this screen's: a rebuilt UI (e.g. a phone turning to landscape for the
         // TV layout) must not cut a load off half-way.

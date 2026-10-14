@@ -18,7 +18,7 @@
             android:layout_width="64dp"
             android:layout_height="64dp"
             android:indeterminate="true"
-            android:indeterminateTint="@color/accent" />
+            android:indeterminateTint="?attr/wtAccent" />
 
         <TextView
             android:id="@+id/first_load_title"
@@ -56,7 +56,7 @@
                 android:paddingStart="28dp"
                 android:paddingEnd="28dp"
                 android:text="@string/first_load_retry"
-                android:textColor="@color/text_primary"
+                android:textColor="?attr/wtTextPrimary"
                 android:textSize="18sp" />
 
             <TextView
@@ -68,7 +68,7 @@
                 android:paddingStart="28dp"
                 android:paddingEnd="28dp"
                 android:text="@string/first_load_own"
-                android:textColor="@color/text_primary"
+                android:textColor="?attr/wtTextPrimary"
                 android:textSize="18sp" />
         </LinearLayout>
 

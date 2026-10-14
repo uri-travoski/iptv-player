@@ -292,8 +292,8 @@ class AppGraph(private val app: Application) {
 class Prefs(private val sp: SharedPreferences) {
 
     companion object {
-        const val MIN_SLOTS = 1
-        const val DEFAULT_SLOTS = 2
+        const val MIN_SLOTS = 0
+        const val DEFAULT_SLOTS = 0
         const val MAX_SLOTS = 14
         const val UI_TV = "tv"
         const val UI_MOBILE = "mobile"
@@ -348,19 +348,20 @@ class Prefs(private val sp: SharedPreferences) {
         set(v) = sp.edit().putBoolean("last_boot_allowed", v).apply()
 
     /**
-     * How many app slots the home screen shows (1..14, rows of 5). New installs get 2. An update
-     * from a version without this setting keeps every slot that already holds an app (up to 5),
-     * so nobody's apps disappear.
+     * How many apps the home screen can show (0..14, rows of 5 under the big tiles). None by
+     * default, so the home screen is one row: Live TV, Movies, Series. Only slots holding an app
+     * show (no empty "+" tiles); Menu > Add app to home screen fills the next one. 2.37 set every
+     * box to 0 once; the apps chosen before stay remembered for when slots are added again.
      */
     var appSlotCount: Int
         get() {
-            val stored = sp.getInt("app_slot_count", -1)
-            if (stored != -1) return stored.coerceIn(MIN_SLOTS, MAX_SLOTS)
-            val highestUsed = (0 until 5).lastOrNull { appSlot(it) != null }
-            val n = if (highestUsed == null) DEFAULT_SLOTS else (highestUsed + 1).coerceIn(DEFAULT_SLOTS, 5)
-            return n.also { appSlotCount = it }
+            if (!sp.getBoolean("slots_reset_237", false)) {
+                sp.edit().putInt("app_slot_count", DEFAULT_SLOTS).putBoolean("slots_reset_237", true).apply()
+                return DEFAULT_SLOTS
+            }
+            return sp.getInt("app_slot_count", DEFAULT_SLOTS).coerceIn(MIN_SLOTS, MAX_SLOTS)
         }
-        set(v) = sp.edit().putInt("app_slot_count", v.coerceIn(MIN_SLOTS, MAX_SLOTS)).apply()
+        set(v) = sp.edit().putInt("app_slot_count", v.coerceIn(MIN_SLOTS, MAX_SLOTS)).putBoolean("slots_reset_237", true).apply()
 
     /** Check GitHub for a newer WorldTV when the app starts (App Settings). */
     var autoUpdate: Boolean
@@ -418,6 +419,11 @@ class Prefs(private val sp: SharedPreferences) {
     var adultScanVersion: Int
         get() = sp.getInt("adult_scan_version", 0)
         set(v) = sp.edit().putInt("adult_scan_version", v).apply()
+
+    /** App Settings > Theme (Themes.CLASSIC, GLASS or SHOWTIME). */
+    var theme: String
+        get() = sp.getString("theme", null)?.takeIf { it in com.worldtv.iptvplayer.ui.Themes.ALL } ?: com.worldtv.iptvplayer.ui.Themes.CLASSIC
+        set(v) = sp.edit().putString("theme", v).apply()
 
     /** PlayerView resize mode (AspectRatioFrameLayout.RESIZE_MODE_*), 0 = fit. */
     var resizeMode: Int

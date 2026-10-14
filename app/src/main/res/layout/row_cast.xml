@@ -22,7 +22,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="center"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/wtTextSecondary"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -42,6 +42,6 @@
         android:ellipsize="end"
         android:gravity="center_horizontal"
         android:maxLines="2"
-        android:textColor="@color/text_primary"
+        android:textColor="?attr/wtTextPrimary"
         android:textSize="13sp" />
 </LinearLayout>

@@ -9,5 +9,5 @@
     android:maxLines="1"
     android:paddingStart="12dp"
     android:paddingEnd="12dp"
-    android:textColor="@color/text_primary"
+    android:textColor="?attr/wtTextPrimary"
     android:textSize="17sp" />

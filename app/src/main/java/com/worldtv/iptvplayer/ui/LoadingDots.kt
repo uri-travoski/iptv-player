@@ -17,8 +17,8 @@ class LoadingDots @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
-    private val on = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = context.getColor(R.color.accent) }
-    private val off = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = context.getColor(R.color.divider) }
+    private val on = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = context.themeColor(R.attr.wtAccent) }
+    private val off = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = context.themeColor(R.attr.wtDivider) }
     private var lit = 0
 
     private val tick = object : Runnable {

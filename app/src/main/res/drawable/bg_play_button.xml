@@ -5,19 +5,19 @@
     <!-- Pressed first (also while focused), fading out, so every press shows. -->
     <item android:state_pressed="true">
         <shape android:shape="oval">
-            <solid android:color="@color/pressed" />
-            <stroke android:width="3dp" android:color="@color/text_primary" />
+            <solid android:color="?attr/wtPressed" />
+            <stroke android:width="3dp" android:color="?attr/wtTextPrimary" />
         </shape>
     </item>
     <item android:state_focused="true">
         <shape android:shape="oval">
-            <solid android:color="@color/accent" />
-            <stroke android:width="3dp" android:color="@color/text_primary" />
+            <solid android:color="?attr/wtAccent" />
+            <stroke android:width="3dp" android:color="?attr/wtTextPrimary" />
         </shape>
     </item>
     <item>
         <shape android:shape="oval">
-            <solid android:color="@color/accent" />
+            <solid android:color="?attr/wtAccent" />
         </shape>
     </item>
 </selector>

@@ -10,5 +10,5 @@
     android:maxLines="1"
     android:paddingStart="14dp"
     android:paddingEnd="14dp"
-    android:textColor="@color/text_primary"
+    android:textColor="?attr/wtTextPrimary"
     android:textSize="15sp" />

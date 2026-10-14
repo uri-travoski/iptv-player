@@ -103,7 +103,7 @@ class PlaylistsScreen(activity: MainActivity) : Screen(activity) {
         busy = true
         activity.keepScreenOn(true) // a phone that sleeps mid-refresh drops the connection
         busyDots.visibility = View.VISIBLE
-        message.setTextColor(activity.getColor(R.color.text_secondary))
+        message.setTextColor(activity.themeColor(R.attr.wtTextSecondary))
         scope.launch {
             try {
                 graph.syncer.sync(p) { text -> activity.runOnUiThread { message.text = text } }

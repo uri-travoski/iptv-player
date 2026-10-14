@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="@color/surface">
+        android:background="?attr/wtSurface">
 
         <ImageView
             android:id="@+id/logo"
@@ -42,7 +42,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="top|end"
-            android:background="@color/scrim"
+            android:background="?attr/wtScrim"
             android:paddingStart="6dp"
             android:paddingEnd="6dp"
             android:text="★"
@@ -59,6 +59,6 @@
         android:ellipsize="end"
         android:gravity="center_horizontal|top"
         android:maxLines="2"
-        android:textColor="@color/text_primary"
+        android:textColor="?attr/wtTextPrimary"
         android:textSize="14sp" />
 </LinearLayout>

@@ -70,7 +70,7 @@ object PinPrompt {
         val input = EditText(activity).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
             filters = arrayOf(InputFilter.LengthFilter(Pin.LENGTH))
-            setTextColor(activity.getColor(R.color.text_primary))
+            setTextColor(activity.themeColor(R.attr.wtTextPrimary))
             textSize = 24f
             letterSpacing = 0.4f
             isSingleLine = true

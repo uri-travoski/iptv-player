@@ -22,8 +22,8 @@
         android:layout_height="4dp"
         android:layout_marginTop="6dp"
         android:max="1000"
-        android:progressBackgroundTint="@color/divider"
-        android:progressTint="@color/accent" />
+        android:progressBackgroundTint="?attr/wtDivider"
+        android:progressTint="?attr/wtAccent" />
 
     <TextView
         android:id="@+id/guide_next"

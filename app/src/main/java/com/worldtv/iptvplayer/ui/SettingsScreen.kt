@@ -113,6 +113,7 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
             }
             tiles += Tile("slots", R.drawable.ic_s_apps, { s(R.string.set_slots) }, { prefs.appSlotCount.toString() }) { chooseSlots() }
         }
+        tiles += Tile("theme", R.drawable.ic_s_palette, { s(R.string.theme_title) }, { s(Themes.label(prefs.theme)) }) { chooseTheme() }
         tiles += Tile("layout", R.drawable.ic_s_layout, { s(R.string.set_layout) }, { s(if (mobile) R.string.set_value_mobile else R.string.set_value_tv) }) {
             prefs.uiMode = if (mobile) Prefs.UI_TV else Prefs.UI_MOBILE
             activity.restartUi(thenSettings = true)
@@ -158,7 +159,7 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         LinearLayout.LayoutParams(0, (if (mobile) 84 else 76).times(d).toInt(), 1f).apply { if (col > 0) marginStart = (14 * d).toInt() }
 
     private fun refresh() {
-        val dim = activity.getColor(R.color.text_secondary)
+        val dim = activity.themeColor(R.attr.wtTextSecondary)
         for (t in tiles) {
             val name = t.label()
             val value = t.value?.invoke()
@@ -366,6 +367,23 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         }
     }
 
+    // ---- Theme ----
+
+    private fun chooseTheme() {
+        val themes = Themes.ALL
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.theme_title)
+            .setSingleChoiceItems(themes.map { activity.getString(Themes.label(it)) }.toTypedArray(), themes.indexOf(prefs.theme)) { d, which ->
+                d.dismiss()
+                if (themes[which] != prefs.theme) {
+                    prefs.theme = themes[which]
+                    activity.applyTheme()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     // ---- Automatic refresh ----
 
     private fun autoRefreshLabel(mode: String) = activity.getString(
@@ -562,7 +580,7 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         val pass = field(R.string.subs_pass_hint, old?.password.orEmpty(), password = true)
         val help = TextView(activity).apply {
             setText(if (service == OnlineService.TMDB) R.string.online_tmdb_help else R.string.subs_online_help)
-            setTextColor(activity.getColor(R.color.text_secondary))
+            setTextColor(activity.themeColor(R.attr.wtTextSecondary))
             textSize = 14f
         }
         val box = LinearLayout(activity).apply {

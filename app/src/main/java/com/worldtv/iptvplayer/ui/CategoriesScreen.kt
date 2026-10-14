@@ -201,7 +201,7 @@ class CategoriesScreen(
         override fun onBindViewHolder(holder: VH, position: Int) {
             val row = rows[position]
             holder.text.text = (if (row.hidden) "✕   " else "✓   ") + row.name + row.note
-            holder.text.setTextColor(activity.getColor(if (row.hidden) R.color.text_secondary else R.color.text_primary))
+            holder.text.setTextColor(activity.themeColor(if (row.hidden) R.attr.wtTextSecondary else R.attr.wtTextPrimary))
         }
 
         inner class VH(val text: TextView) : RecyclerView.ViewHolder(text) {

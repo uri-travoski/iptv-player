@@ -5,12 +5,12 @@
     <!-- Pressed first (also while focused), fading out, so every press shows. -->
     <item android:state_pressed="true">
         <shape android:shape="oval">
-            <solid android:color="@color/pressed" />
+            <solid android:color="?attr/wtPressed" />
         </shape>
     </item>
     <item android:state_focused="true">
         <shape android:shape="oval">
-            <solid android:color="@color/accent" />
+            <solid android:color="?attr/wtAccent" />
         </shape>
     </item>
     <item>

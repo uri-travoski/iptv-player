@@ -176,7 +176,7 @@ class AddPlaylistScreen(
     }
 
     private fun showInfo(text: String) {
-        message.setTextColor(activity.getColor(R.color.text_secondary))
+        message.setTextColor(activity.themeColor(R.attr.wtTextSecondary))
         message.text = text
     }
 }

@@ -6,19 +6,20 @@
     <!-- Pressed first (also while focused), fading out, so every press shows. -->
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/pressed" />
+            <solid android:color="?attr/wtPressed" />
             <corners android:radius="8dp" />
         </shape>
     </item>
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/accent" />
+            <solid android:color="?attr/wtAccent" />
             <corners android:radius="8dp" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#803F111C" />
+            <solid android:color="?attr/wtSlot" />
+            <stroke android:width="1dp" android:color="?attr/wtStroke" />
             <corners android:radius="8dp" />
         </shape>
     </item>

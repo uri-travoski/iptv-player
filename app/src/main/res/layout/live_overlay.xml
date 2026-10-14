@@ -75,8 +75,8 @@
                 android:layout_height="4dp"
                 android:layout_marginTop="6dp"
                 android:max="1000"
-                android:progressBackgroundTint="@color/divider"
-                android:progressTint="@color/accent"
+                android:progressBackgroundTint="?attr/wtDivider"
+                android:progressTint="?attr/wtAccent"
                 android:visibility="gone" />
 
             <TextView
@@ -129,7 +129,7 @@
             android:paddingTop="4dp"
             android:paddingEnd="10dp"
             android:paddingBottom="4dp"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/wtTextPrimary"
             android:textSize="14sp"
             android:visibility="invisible" />
     </FrameLayout>
@@ -140,7 +140,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:background="@color/scrim"
+        android:background="?attr/wtScrim"
         android:padding="16dp"
         android:visibility="gone" />
 </merge>

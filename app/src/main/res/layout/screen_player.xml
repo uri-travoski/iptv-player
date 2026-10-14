@@ -13,7 +13,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:background="@color/scrim"
+        android:background="?attr/wtScrim"
         android:padding="16dp"
         android:visibility="gone" />
 
@@ -91,9 +91,9 @@
                     android:focusable="false"
                     android:max="1000"
                     android:progressBackgroundTint="#66FFFFFF"
-                    android:progressTint="@color/accent"
+                    android:progressTint="?attr/wtAccent"
                     android:secondaryProgressTint="#99FFFFFF"
-                    android:thumbTint="@color/text_primary" />
+                    android:thumbTint="?attr/wtTextPrimary" />
 
                 <TextView
                     android:id="@+id/duration"
@@ -144,7 +144,7 @@
             android:paddingTop="4dp"
             android:paddingEnd="10dp"
             android:paddingBottom="4dp"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/wtTextPrimary"
             android:textSize="14sp"
             android:visibility="invisible" />
     </FrameLayout>

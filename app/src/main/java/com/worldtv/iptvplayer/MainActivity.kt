@@ -63,6 +63,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // App Settings > Theme, before any view is made.
+        setTheme(com.worldtv.iptvplayer.ui.Themes.style(App.graph.prefs.theme))
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         // The root layout paints the background; the window's copy would be painted under it
@@ -97,7 +99,13 @@ class MainActivity : ComponentActivity() {
             }
         })
 
-        lifecycleScope.launch { route() }
+        lifecycleScope.launch {
+            route()
+            if (settingsAfterTheme) {
+                settingsAfterTheme = false
+                push(com.worldtv.iptvplayer.ui.SettingsScreen(this@MainActivity))
+            }
+        }
         lifecycleScope.launch { scanForAdult() }
         App.graph.telemetry.sessionStarted(if (isLauncher()) "launcher" else "icon")
         logStartup()
@@ -143,6 +151,12 @@ class MainActivity : ComponentActivity() {
             playlists.isEmpty() -> push(AddPlaylistScreen(this, firstRun = true))
             active == null -> push(PlaylistsScreen(this))
         }
+    }
+
+    /** App Settings > Theme was changed: every screen is made again in the new colours, back in App Settings. */
+    fun applyTheme() {
+        settingsAfterTheme = true
+        recreate()
     }
 
     /** Rebuilds every screen, e.g. after switching between TV and Mobile; [thenSettings] reopens App Settings. */
@@ -390,5 +404,10 @@ class MainActivity : ComponentActivity() {
         stack.forEach { it.destroy() }
         stack.clear()
         super.onDestroy()
+    }
+
+    private companion object {
+        /** Set before a theme change recreates the activity: App Settings opens again. */
+        var settingsAfterTheme = false
     }
 }

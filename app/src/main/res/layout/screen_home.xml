@@ -7,18 +7,57 @@
     android:paddingTop="36dp"
     android:paddingEnd="48dp">
 
-    <TextView
-        style="@style/Text.Title"
-        android:layout_width="wrap_content"
+    <!-- Title and account on the left; small Reload and menu (⋮) icons top right. -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/app_name" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <TextView
-        android:id="@+id/account"
-        style="@style/Text.Secondary"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/Text.Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name" />
+
+            <TextView
+                android:id="@+id/account"
+                style="@style/Text.Secondary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/home_reload"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:background="@drawable/bg_icon_button"
+            android:contentDescription="@string/reload_playlist"
+            android:focusable="true"
+            android:padding="12dp"
+            android:src="@drawable/ic_refresh"
+            android:tint="?attr/wtTextPrimary" />
+
+        <ImageView
+            android:id="@+id/home_menu"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_icon_button"
+            android:contentDescription="@string/home_menu"
+            android:focusable="true"
+            android:padding="12dp"
+            android:src="@drawable/ic_more_vert"
+            android:tint="?attr/wtTextPrimary" />
+    </LinearLayout>
 
     <!-- Reload progress: shown only while a reload runs, and for its result. -->
     <LinearLayout
@@ -91,8 +130,7 @@
                 android:text="@string/series" />
         </LinearLayout>
 
-        <!-- Rows of 5: first the user's first app + Reload playlist, App Settings, All apps and
-             System settings (always on the right); more apps in rows of 5 below. -->
+        <!-- The user's apps (App Settings > Home app slots; none by default), rows of 5. -->
         <LinearLayout
             android:id="@+id/home_rows"
             android:layout_width="match_parent"

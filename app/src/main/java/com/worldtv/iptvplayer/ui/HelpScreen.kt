@@ -23,7 +23,7 @@ class HelpScreen(activity: MainActivity) : Screen(activity) {
             sections.addView(
                 TextView(activity).apply {
                     text = title
-                    setTextColor(activity.getColor(R.color.text_primary))
+                    setTextColor(activity.themeColor(R.attr.wtTextPrimary))
                     textSize = 19f
                     setTypeface(typeface, Typeface.BOLD)
                     setPadding(0, (22 * density).toInt(), 0, (6 * density).toInt())
@@ -32,7 +32,7 @@ class HelpScreen(activity: MainActivity) : Screen(activity) {
             sections.addView(
                 TextView(activity).apply {
                     text = bodies.getOrElse(i) { "" }
-                    setTextColor(activity.getColor(R.color.text_secondary))
+                    setTextColor(activity.themeColor(R.attr.wtTextSecondary))
                     textSize = 16f
                     setLineSpacing(4 * density, 1f)
                 },

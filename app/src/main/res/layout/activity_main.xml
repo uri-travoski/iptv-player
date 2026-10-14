@@ -4,7 +4,7 @@
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background">
+    android:background="?attr/wtBackground">
     <!-- The app's only full-screen background. Screens are transparent over it (no overdraw on
          Mali GPUs); the theme's window background is dropped once this is laid out. -->
 
