@@ -51,7 +51,14 @@ class PlayerController(context: Context, http: OkHttpClient, private val telemet
 
     private val main = Handler(Looper.getMainLooper())
     private val listeners = ArrayList<Listener>()
+    @Volatile
     private var currentUrl: String? = null
+
+    /** The stream playing or starting; null when stopped. Read by the channel check (any thread). */
+    val activeUrl: String? get() = currentUrl
+
+    /** Called just before a stream starts, so a channel check on the same account lets go first. */
+    var beforePlay: ((String) -> Unit)? = null
     private var retries = 0
 
     val player: ExoPlayer
@@ -214,6 +221,7 @@ class PlayerController(context: Context, http: OkHttpClient, private val telemet
     fun play(url: String) {
         if (url == currentUrl && player.playbackState != Player.STATE_IDLE) return
         main.removeCallbacksAndMessages(null)
+        beforePlay?.invoke(url)
         currentUrl = url
         retries = 0
         videoDecoderName = null

@@ -48,6 +48,8 @@ class Syncer(
     private val adultNames: () -> AdultNames,
     /** Diagnostics; null when telemetry is off. */
     private val telemetry: Telemetry? = null,
+    /** After every successful load, with the playlist id (the channel check runs again). */
+    private val onSynced: (Long) -> Unit = {},
 ) {
 
     /** Checks an Xtream login without touching the database. */
@@ -122,6 +124,7 @@ class Syncer(
                 android.util.Log.w("WorldTV", "adult auto-hide failed", e)
             }
             reportSync(p, startedAt, success = true, error = null)
+            onSynced(p.id)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {

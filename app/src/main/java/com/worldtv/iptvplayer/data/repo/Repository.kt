@@ -40,6 +40,9 @@ data class Playlist(
 
 data class CategoryRow(val key: String, val name: String)
 
+/** A live channel to check: its id, and its own link (M3U) when it has one. */
+data class CheckTarget(val itemId: String, val streamUrl: String?)
+
 /** One of the viewer's own Live TV groups. */
 data class Group(val id: Long, val name: String)
 
@@ -154,6 +157,8 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             w.delete("most_watched", "playlist_id = ?", args)
             w.delete("live_order", "playlist_id = ?", args)
             w.delete("category_order", "playlist_id = ?", args)
+            w.delete("check_category", "playlist_id = ?", args)
+            w.delete("channel_check", "playlist_id = ?", args)
             liveOrdered.remove(id)
             w.delete("user_group_item", "group_id IN (SELECT id FROM user_group WHERE playlist_id = ?)", args)
             w.delete("user_group", "playlist_id = ?", args)
@@ -205,6 +210,74 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             while (c.moveToNext()) out += CategoryRow(c.getString(0), c.getString(1))
         }
         out
+    }
+
+    // ---- channel check (Settings > Channel check) ----
+
+    /** The Live TV categories chosen for checking. */
+    suspend fun checkCategories(playlistId: Long): Set<String> = withContext(io) {
+        db.readableDatabase.rawQuery("SELECT cat_id FROM check_category WHERE playlist_id = ?", arrayOf(playlistId.toString())).use { c ->
+            val out = HashSet<String>()
+            while (c.moveToNext()) out += c.getString(0)
+            out
+        }
+    }
+
+    suspend fun setCheckCategories(playlistId: Long, catIds: Collection<String>) = withContext(io) {
+        val w = db.writableDatabase
+        w.beginTransaction()
+        try {
+            w.delete("check_category", "playlist_id = ?", arrayOf(playlistId.toString()))
+            for (id in catIds) w.execSQL("INSERT OR IGNORE INTO check_category(playlist_id, cat_id) VALUES (?, ?)", arrayOf<Any>(playlistId, id))
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
+    }
+
+    /** The channels to check: every live channel in the chosen categories, in list order. */
+    suspend fun channelsToCheck(playlistId: Long): List<CheckTarget> = withContext(io) {
+        db.readableDatabase.rawQuery(
+            """SELECT e.item_id, e.stream_url FROM entry e
+               JOIN check_category k ON k.playlist_id = e.playlist_id AND k.cat_id = e.category_id
+               JOIN category c ON c.playlist_id = e.playlist_id AND c.type = e.type AND c.cat_id = e.category_id
+               WHERE e.playlist_id = ? AND e.type = ? ORDER BY $CAT_POS, e.sort""",
+            arrayOf(playlistId.toString(), ContentType.LIVE.ordinal.toString()),
+        ).use { c ->
+            val out = ArrayList<CheckTarget>(c.count)
+            val seen = HashSet<String>()
+            while (c.moveToNext()) if (seen.add(c.getString(0))) out += CheckTarget(c.getString(0), c.getStringOrNull(1))
+            out
+        }
+    }
+
+    suspend fun saveChecks(playlistId: Long, results: Map<String, Boolean>, at: Long) = withContext(io) {
+        if (results.isEmpty()) return@withContext
+        val w = db.writableDatabase
+        w.beginTransaction()
+        try {
+            for ((id, ok) in results) {
+                w.execSQL(
+                    "INSERT OR REPLACE INTO channel_check(playlist_id, item_id, ok, checked) VALUES (?, ?, ?, ?)",
+                    arrayOf<Any>(playlistId, id, if (ok) 1 else 0, at),
+                )
+            }
+            w.setTransactionSuccessful()
+        } finally {
+            w.endTransaction()
+        }
+    }
+
+    /** Check results newer than [since] (ms): item id to working. Older ones no longer count. */
+    suspend fun checkResults(playlistId: Long, since: Long): Map<String, Boolean> = withContext(io) {
+        db.readableDatabase.rawQuery(
+            "SELECT item_id, ok FROM channel_check WHERE playlist_id = ? AND checked >= ?",
+            arrayOf(playlistId.toString(), since.toString()),
+        ).use { c ->
+            val out = HashMap<String, Boolean>(c.count)
+            while (c.moveToNext()) out[c.getString(0)] = c.getInt(1) != 0
+            out
+        }
     }
 
     // ---- category order (Settings > Categories order) ----
@@ -1155,7 +1228,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
 
         private val RESET_TABLES = listOf(
             "entry", "category", "favourite", "progress", "hidden_category", "hidden_item", "shown_category", "shown_item",
-            "user_group_item", "user_group", "live_watch", "most_watched", "live_order", "category_order", "playlist",
+            "user_group_item", "user_group", "live_watch", "most_watched", "live_order", "category_order", "check_category", "channel_check", "playlist",
         )
 
         const val MIN_RESUME_MS = 30_000L

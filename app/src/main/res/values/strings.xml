@@ -260,11 +260,23 @@
 
     <string name="auto_refresh_title">Playlist Auto Reload</string>
     <string name="refresh_every_start">Every start</string>
-    <string name="refresh_daily">Every day</string>
-    <string name="refresh_2_days">Every 2 days</string>
+    <string name="refresh_daily">Every day at 3 am</string>
+    <string name="refresh_2_days">Every 2 days at 3 am</string>
     <string name="refresh_every_start_long">Update live, movies &amp; series every time WorldTV starts</string>
-    <string name="refresh_daily_long">Update live, movies &amp; series every day (recommended)</string>
-    <string name="refresh_2_days_long">Update live, movies &amp; series every 2 days</string>
+    <string name="refresh_daily_long">Update live, movies &amp; series every day at 3 am (recommended)</string>
+    <string name="refresh_2_days_long">Update live, movies &amp; series every 2 days at 3 am</string>
+    <string name="check_title">Channel check</string>
+    <plurals name="check_categories">
+        <item quantity="one">%d category</item>
+        <item quantity="other">%d categories</item>
+    </plurals>
+    <string name="check_running">checking %s</string>
+    <string name="check_last">checked %s</string>
+    <string name="check_pick_title">Categories to check · %s</string>
+    <string name="check_now">Check now</string>
+    <string name="check_filter_hint">Type to find, e.g. AU</string>
+    <string name="check_started">Checking channels in the background while nothing is playing</string>
+    <string name="check_no_categories">This playlist has no Live TV categories</string>
     <string name="auto_refreshing">Updating the playlist automatically…</string>
     <string name="auto_refresh_done">Playlist updated automatically</string>
 

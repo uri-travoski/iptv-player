@@ -210,9 +210,22 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         } else {
             playingRow?.let { play(playingIndex, it, fromCategoryKey = playingCategoryKey) }
         }
+        // Channel check marks: loaded now, and again whenever a running check saves results.
+        healthWatch?.cancel()
+        healthWatch = scope.launch { graph.channelCheck.updates.collect { showHealth() } }
+    }
+
+    private var healthWatch: Job? = null
+
+    /** Results from the last 7 days only: older ones (the box was off) no longer mark anything. */
+    private suspend fun showHealth() {
+        val id = playlist?.id ?: graph.prefs.activePlaylist
+        val since = System.currentTimeMillis() - com.worldtv.iptvplayer.data.check.ChannelCheck.VALID_MS
+        channelAdapter.health = graph.repo.checkResults(id, since)
     }
 
     override fun onHidden() {
+        healthWatch?.cancel()
         activity.keepScreenOn(false)
         if (fullscreen) activity.setFullscreen(false)
         graph.player.removeListener(playerListener)

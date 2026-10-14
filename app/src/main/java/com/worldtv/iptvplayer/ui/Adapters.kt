@@ -159,6 +159,17 @@ class PagedEntryAdapter(
     private val pages = HashMap<Int, List<EntryRow>>()
     private val loading = HashSet<Int>()
 
+    /**
+     * Channel check results (item id to working), for the categories that are checked: a green
+     * dot on working channels, dimmed text on the others. Channels not in it look as usual.
+     */
+    var health: Map<String, Boolean> = emptyMap()
+        set(value) {
+            if (field == value) return
+            field = value
+            notifyItemRangeChanged(0, total, PAYLOAD_STATE)
+        }
+
     /** Item id of the stream now playing, highlighted in the list. */
     var playingItemId: String? = null
         set(value) {
@@ -199,6 +210,7 @@ class PagedEntryAdapter(
     override fun onBindViewHolder(holder: VH, position: Int, payloads: MutableList<Any>) {
         if (payloads.isNotEmpty() && payloads.all { it == PAYLOAD_STATE }) {
             holder.itemView.isActivated = rowAt(position)?.itemId == playingItemId && playingItemId != null
+            showHealth(holder, rowAt(position)?.itemId)
             return
         }
         super.onBindViewHolder(holder, position, payloads)
@@ -213,6 +225,7 @@ class PagedEntryAdapter(
             holder.rating?.visibility = View.GONE
             showLogo(holder, null)
             holder.itemView.isActivated = false
+            showHealth(holder, null)
             request(position / PAGE)
             return
         }
@@ -224,6 +237,17 @@ class PagedEntryAdapter(
         }
         showLogo(holder, row.logo)
         holder.itemView.isActivated = row.itemId == playingItemId
+        showHealth(holder, row.itemId)
+    }
+
+    /** Still selectable either way: a dimmed channel can be tried. */
+    private fun showHealth(holder: VH, itemId: String?) {
+        val ok = itemId?.let { health[it] }
+        holder.ok?.visibility = if (ok == true) View.VISIBLE else View.GONE
+        val alpha = if (ok == false) DIM else 1f
+        holder.name.alpha = alpha
+        holder.logo.alpha = alpha
+        holder.num?.alpha = alpha
     }
 
     /**
@@ -304,6 +328,8 @@ class PagedEntryAdapter(
         val logo: ImageView = view.findViewById(R.id.logo)
         val name: TextView = view.findViewById(R.id.name)
         val fav: TextView? = view.findViewById(R.id.fav)
+        /** Channel rows: the green dot of a working channel. */
+        val ok: TextView? = view.findViewById(R.id.ok)
         /** Posters: the provider's rating, top left (only when there is one). */
         val rating: TextView? = view.findViewById(R.id.rating)
 
@@ -328,5 +354,8 @@ class PagedEntryAdapter(
         const val PAGE = 100
         private const val MAX_PAGES = 8
         private const val PAYLOAD_STATE = "state"
+
+        /** A channel that didn't work when last checked. */
+        private const val DIM = 0.4f
     }
 }

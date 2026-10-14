@@ -38,6 +38,17 @@
         android:textColor="@color/text_primary"
         android:textSize="18sp" />
 
+    <!-- Channel check: shown on channels that worked when last checked. -->
+    <TextView
+        android:id="@+id/ok"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:text="●"
+        android:textColor="#FF3DDC84"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/fav"
         android:layout_width="wrap_content"

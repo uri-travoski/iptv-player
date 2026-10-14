@@ -70,10 +70,16 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         graph.player.stop()
         refresh() // the launcher or overlay permission may have changed in system settings meanwhile
         if (activity.currentFocus == null || !isInside(activity.currentFocus!!)) views[tiles.first().tag]?.requestFocus()
+        // Channel check progress ("checking 12 / 40") while this screen is up.
+        checkWatch?.cancel()
+        checkWatch = scope.launch { graph.channelCheck.progress.collect { updateCheckSummary() } }
     }
+
+    private var checkWatch: kotlinx.coroutines.Job? = null
 
     /** Save what the settings are now, for support. */
     override fun onHidden() {
+        checkWatch?.cancel()
         graph.telemetry.snapshotSettings()
     }
 
@@ -93,6 +99,7 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         tiles += Tile("playlists", R.drawable.ic_s_list, { s(R.string.set_playlists) }) { activity.push(PlaylistsScreen(activity)) }
         tiles += Tile("add", R.drawable.ic_s_add, { s(R.string.add_playlist) }) { activity.push(AddPlaylistScreen(activity)) }
         tiles += Tile("auto_refresh", R.drawable.ic_s_autorenew, { s(R.string.auto_refresh_title) }, { autoRefreshLabel(prefs.autoRefresh) }) { chooseAutoRefresh() }
+        tiles += Tile("channel_check", R.drawable.ic_s_check, { s(R.string.check_title) }, { checkSummary }) { chooseCheckCategories() }
         tiles += Tile("subtitles", R.drawable.ic_s_subtitles, { s(R.string.set_subtitles) }) { subtitleSettings() }
         tiles += Tile("categories", R.drawable.ic_s_hide, { s(R.string.action_categories) }) { openCategories() }
         tiles += Tile("category_order", R.drawable.ic_s_sort, { s(R.string.category_order_title) }) { openLiveOrder(categories = true) }
@@ -251,6 +258,95 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
         scope.launch {
             val p = graph.repo.playlist(prefs.activePlaylist) ?: return@launch activity.toast(activity.getString(R.string.no_playlist_yet))
             activity.push(LiveOrderScreen(activity, p, categories = categories))
+        }
+    }
+
+    // ---- Channel check ----
+
+    /** "3 categories · checked today 3:12 AM", "checking 12 / 40", or "Off". */
+    private var checkSummary = ""
+
+    private suspend fun updateCheckSummary() {
+        val p = graph.repo.playlist(prefs.activePlaylist)
+        val n = if (p == null) 0 else graph.repo.checkCategories(p.id).size
+        val running = graph.channelCheck.progress.value
+        val last = if (p == null) 0 else graph.channelCheck.lastCheck(p.id)
+        checkSummary = when {
+            n == 0 -> activity.getString(R.string.set_off)
+            running != null -> activity.resources.getQuantityString(R.plurals.check_categories, n, n) + "  ·  " + activity.getString(R.string.check_running, running)
+            last > 0 -> activity.resources.getQuantityString(R.plurals.check_categories, n, n) + "  ·  " + activity.getString(R.string.check_last, Dates.dayTime(last))
+            else -> activity.resources.getQuantityString(R.plurals.check_categories, n, n)
+        }
+        refresh()
+    }
+
+    /**
+     * Picks the active playlist's Live TV categories to check. Chosen ones are listed first. Save
+     * (or Check now) starts a check over, in the background, when nothing is playing.
+     */
+    private fun chooseCheckCategories() {
+        scope.launch {
+            val p = graph.repo.playlist(prefs.activePlaylist) ?: return@launch activity.toast(activity.getString(R.string.no_playlist_yet))
+            val chosen = graph.repo.checkCategories(p.id)
+            val all = graph.repo.categories(p.id, ContentType.LIVE).filter { !com.worldtv.iptvplayer.data.repo.Repository.isBuiltIn(it.key) }
+            if (all.isEmpty()) return@launch activity.toast(activity.getString(R.string.check_no_categories))
+            val cats = all.filter { it.key in chosen } + all.filter { it.key !in chosen }
+            val picked = LinkedHashSet(cats.map { it.key }.filter { it in chosen })
+            fun save(checkNow: Boolean) {
+                val ids = cats.map { it.key }.filter { it in picked }
+                scope.launch {
+                    graph.repo.setCheckCategories(p.id, ids)
+                    if (ids.isNotEmpty() && (checkNow || ids.toSet() != chosen)) {
+                        graph.channelCheck.request(p.id, fresh = true)
+                        activity.toast(activity.getString(R.string.check_started))
+                    }
+                    graph.channelCheck.updates.value = graph.channelCheck.updates.value + 1
+                    updateCheckSummary()
+                }
+            }
+            // A filter on top: big playlists have hundreds of categories ("AU" finds the Australian ones).
+            val d = activity.resources.displayMetrics.density
+            val filter = EditText(activity).apply {
+                hint = activity.getString(R.string.check_filter_hint)
+                isSingleLine = true
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            }
+            val list = android.widget.ListView(activity).apply {
+                choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
+                itemsCanFocus = false
+            }
+            var shown = cats
+            fun show(query: String) {
+                val q = query.trim()
+                shown = if (q.isEmpty()) cats else cats.filter { it.name.contains(q, ignoreCase = true) }
+                list.adapter = android.widget.ArrayAdapter(activity, android.R.layout.simple_list_item_multiple_choice, shown.map { it.name })
+                shown.forEachIndexed { i, c -> list.setItemChecked(i, c.key in picked) }
+            }
+            list.setOnItemClickListener { _, _, pos, _ ->
+                val key = shown[pos].key
+                if (list.isItemChecked(pos)) picked += key else picked -= key
+            }
+            filter.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) = show(s?.toString().orEmpty())
+            })
+            show("")
+            val box = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                val pad = (20 * d).toInt()
+                setPadding(pad, (8 * d).toInt(), pad, 0)
+                addView(filter, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+                addView(list, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (activity.resources.displayMetrics.heightPixels * 0.5f).toInt()))
+            }
+            AlertDialog.Builder(activity)
+                .setTitle(activity.getString(R.string.check_pick_title, p.name))
+                .setView(box)
+                .setPositiveButton(R.string.group_save) { _, _ -> save(checkNow = false) }
+                .setNeutralButton(R.string.check_now) { _, _ -> save(checkNow = true) }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
         }
     }
 

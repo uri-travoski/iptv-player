@@ -85,6 +85,30 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
         createWatch(db)
         createLiveOrder(db)
         createCategoryOrder(db)
+        createChannelCheck(db)
+    }
+
+    /**
+     * Channel check (Settings > Channel check): the Live TV categories chosen for checking, and
+     * the last result per channel. Kept by item id over re-syncs, like favourites.
+     */
+    private fun createChannelCheck(db: SQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS check_category (
+                playlist_id INTEGER NOT NULL,
+                cat_id TEXT NOT NULL,
+                PRIMARY KEY (playlist_id, cat_id)
+            )""",
+        )
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS channel_check (
+                playlist_id INTEGER NOT NULL,
+                item_id TEXT NOT NULL,
+                ok INTEGER NOT NULL,
+                checked INTEGER NOT NULL,
+                PRIMARY KEY (playlist_id, item_id)
+            )""",
+        )
     }
 
     /**
@@ -247,6 +271,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
         if (oldVersion < 10) createWatch(db)
         if (oldVersion < 11) createLiveOrder(db)
         if (oldVersion < 12) createCategoryOrder(db)
+        if (oldVersion < 13) createChannelCheck(db)
         if (oldVersion < 6) {
             // The provider's is_adult flag; and every playlist gets a PIN, 000000 by default.
             db.execSQL("ALTER TABLE entry ADD COLUMN adult INTEGER NOT NULL DEFAULT 0")
@@ -259,6 +284,6 @@ class Db(context: Context) : SQLiteOpenHelper(context, "iptv.db", null, VERSION)
     }
 
     companion object {
-        const val VERSION = 12
+        const val VERSION = 13
     }
 }

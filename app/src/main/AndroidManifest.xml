@@ -62,6 +62,16 @@
             android:exported="false" />
 
         <receiver
+            android:name=".data.check.CheckAlarmReceiver"
+            android:exported="false" />
+
+        <!-- Channel check and the 3 am reload, in the background (JobScheduler). -->
+        <service
+            android:name=".data.check.CheckJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <receiver
             android:name=".BootReceiver"
             android:exported="true">
             <intent-filter>

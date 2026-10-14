@@ -65,6 +65,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         scope.launch { showAccount() }
         scope.launch { showSlots() } // an app may have been installed or removed meanwhile
         scope.launch { autoRefresh() }
+        graph.channelCheck.requestDue() // overdue after the box was off; runs only when idle
         shown = true
         // Update check: once per start, in the background, offered only on the home screen.
         AppUpdates.offerPending(activity, scope)

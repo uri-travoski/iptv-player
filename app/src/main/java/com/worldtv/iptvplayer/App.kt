@@ -49,6 +49,13 @@ class App : Application(), SingletonImageLoader.Factory {
         installCrashHandler()
         // Device snapshot + settings. A no-op (and no thread) when diagnostics are off.
         graph.telemetry.onAppCreate()
+        // Channel check: the 3 am and every-few-hours alarms, and a check that is overdue (the
+        // box was off). Not right away: startup comes first.
+        graph.channelCheck.schedule()
+        graph.appScope.launch {
+            kotlinx.coroutines.delay(60_000)
+            graph.channelCheck.requestDue()
+        }
     }
 
     /** Reports uncaught exceptions to telemetry, then hands over to Android's own handler. */
@@ -156,7 +163,37 @@ class AppGraph(private val app: Application) {
         }
         done()
     }
-    val syncer: Syncer by lazy { Syncer(http, db, repo, io, { adultNames() }, telemetry) }
+    val syncer: Syncer by lazy {
+        // Every successful load (add, Reload, automatic refresh) checks the chosen channels again.
+        Syncer(http, db, repo, io, { adultNames() }, telemetry, onSynced = { channelCheck.request(it, fresh = true) })
+    }
+
+    /** Settings > Channel check: which live channels work, checked in the background. */
+    val channelCheck: com.worldtv.iptvplayer.data.check.ChannelCheck by lazy {
+        com.worldtv.iptvplayer.data.check.ChannelCheck(
+            app, http, repo, prefs, telemetry, appScope,
+            playingUrl = { playerInstance?.activeUrl },
+            reloadIfDue = { reloadIfDue() },
+        )
+    }
+
+    /**
+     * The 3 am reload of the active playlist (Automatic refresh "every day" / "every 2 days"),
+     * with nothing on screen. Skipped while a load runs or for "every start".
+     */
+    private suspend fun reloadIfDue() {
+        if (syncing || prefs.autoRefresh == AutoRefresh.EVERY_START) return
+        val p = repo.playlist(prefs.activePlaylist) ?: return
+        if (!AutoRefresh.isDue(prefs.autoRefresh, p.lastSync, System.currentTimeMillis(), refreshedThisRun = false)) return
+        android.util.Log.i("WorldTV.Refresh", "night reload ${p.name}")
+        syncing = true
+        try {
+            syncer.sync(p) {}
+            autoRefreshedThisRun += p.id
+        } finally {
+            syncing = false
+        }
+    }
     /** Online subtitles (the user's own OpenSubtitles key). */
     val openSubs by lazy {
         val version = app.packageManager.getPackageInfo(app.packageName, 0).versionName
@@ -174,7 +211,15 @@ class AppGraph(private val app: Application) {
 
     /** True while a playlist is being downloaded (manual Reload or automatic refresh). */
     @Volatile var syncing = false
-    val player: PlayerController by lazy { PlayerController(app, http, telemetry) }
+    val player: PlayerController by lazy {
+        PlayerController(app, http, telemetry).also {
+            it.beforePlay = { url -> channelCheck.beforePlay(url) }
+            playerInstance = it
+        }
+    }
+
+    /** The player once created (the channel check never creates it). */
+    @Volatile private var playerInstance: PlayerController? = null
     /** Live TV viewing time, for Most watched. */
     val watch: com.worldtv.iptvplayer.player.WatchTracker by lazy {
         com.worldtv.iptvplayer.player.WatchTracker(player.player, appScope, repo) { adultNames() }
@@ -390,6 +435,16 @@ class Prefs(private val sp: SharedPreferences) {
         get() = sp.getString("auto_refresh", null)?.takeIf { it in AutoRefresh.MODES } ?: AutoRefresh.DAILY
         set(v) = sp.edit().putString("auto_refresh", v).apply()
 
+    /** When the last full channel check of a playlist finished (ms), 0 = never. */
+    fun lastChannelCheck(playlistId: Long): Long = sp.getLong("channel_check_$playlistId", 0)
+
+    fun setLastChannelCheck(playlistId: Long, at: Long) = sp.edit().putLong("channel_check_$playlistId", at).apply()
+
+    /** Playlists waiting for a channel check (kept if the app is closed meanwhile). */
+    var pendingChecks: Set<Long>
+        get() = sp.getStringSet("channel_check_pending", emptySet())!!.mapNotNull { it.toLongOrNull() }.toSet()
+        set(v) = sp.edit().putStringSet("channel_check_pending", v.map { it.toString() }.toSet()).apply()
+
     // ---- subtitles (Settings > Subtitle settings) ----
 
     /** Show subtitles automatically when a stream has them in [subsLanguage] (else only when picked). */
@@ -445,27 +500,59 @@ class Prefs(private val sp: SharedPreferences) {
     }
 }
 
-/** Settings > Automatic refresh: when the active playlist is downloaded again by itself. */
+/**
+ * Settings > Automatic refresh: when the active playlist is downloaded again by itself. Daily and
+ * every-2-days loads happen at 3 am local time, when nobody is likely to be watching (an alarm
+ * wakes the box for it); a box that was off then catches up the next time it shows its home screen.
+ */
 object AutoRefresh {
     const val EVERY_START = "start"
     const val DAILY = "daily"
     const val EVERY_2_DAYS = "2days"
     val MODES = listOf(EVERY_START, DAILY, EVERY_2_DAYS)
 
-    private const val DAY_MS = 24L * 60 * 60 * 1000
+    /** Local hour of the nightly load. */
+    const val HOUR = 3
 
     /**
      * True when a playlist last loaded at [lastSyncMs] should load again now. [refreshedThisRun]:
      * already reloaded since the app started (EVERY_START does it once per start, not on every
      * return to the home screen). A clock set back counts as due rather than never.
      */
-    fun isDue(mode: String, lastSyncMs: Long, nowMs: Long, refreshedThisRun: Boolean): Boolean {
+    fun isDue(
+        mode: String,
+        lastSyncMs: Long,
+        nowMs: Long,
+        refreshedThisRun: Boolean,
+        tz: java.util.TimeZone = java.util.TimeZone.getDefault(),
+    ): Boolean {
         if (refreshedThisRun) return false
         if (lastSyncMs <= 0 || nowMs < lastSyncMs) return true
         return when (mode) {
             EVERY_START -> true
-            DAILY -> nowMs - lastSyncMs >= DAY_MS
-            else -> nowMs - lastSyncMs >= 2 * DAY_MS
+            DAILY -> lastSyncMs < lastNight(nowMs, tz, 0)
+            else -> lastSyncMs < lastNight(nowMs, tz, 1)
         }
+    }
+
+    /** The latest 3 am at or before [nowMs], [daysBack] days earlier. */
+    fun lastNight(nowMs: Long, tz: java.util.TimeZone, daysBack: Int = 0): Long {
+        val c = java.util.Calendar.getInstance(tz)
+        c.timeInMillis = nowMs
+        c.set(java.util.Calendar.HOUR_OF_DAY, HOUR)
+        c.set(java.util.Calendar.MINUTE, 0)
+        c.set(java.util.Calendar.SECOND, 0)
+        c.set(java.util.Calendar.MILLISECOND, 0)
+        if (c.timeInMillis > nowMs) c.add(java.util.Calendar.DAY_OF_YEAR, -1)
+        c.add(java.util.Calendar.DAY_OF_YEAR, -daysBack)
+        return c.timeInMillis
+    }
+
+    /** The next 3 am after [nowMs]. */
+    fun nextNight(nowMs: Long, tz: java.util.TimeZone = java.util.TimeZone.getDefault()): Long {
+        val c = java.util.Calendar.getInstance(tz)
+        c.timeInMillis = lastNight(nowMs, tz)
+        c.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        return c.timeInMillis
     }
 }
