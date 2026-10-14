@@ -479,7 +479,15 @@ class ChannelCheck(
      */
     fun schedule() {
         val am = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, AutoRefresh.nextNight(System.currentTimeMillis()) + NIGHT_DELAY_MS, nightAlarm())
+        val at = AutoRefresh.nextNight(System.currentTimeMillis()) + NIGHT_DELAY_MS
+        // Exact where allowed (Android 12-13 allow it by default); an inexact alarm may come
+        // hours late. Otherwise a 30-minute window from 3 am.
+        val exact = android.os.Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()
+        if (exact) {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, nightAlarm())
+        } else {
+            am.setWindow(AlarmManager.RTC_WAKEUP, at, NIGHT_WINDOW_MS, nightAlarm())
+        }
         val js = app.getSystemService(Context.JOB_SCHEDULER_SERVICE) as android.app.job.JobScheduler
         if (js.getPendingJob(JOB_PERIODIC) == null) {
             js.schedule(
@@ -546,6 +554,8 @@ class ChannelCheck(
         private const val BUSY_RETRY_MS = 60_000L
         private const val OFFLINE_RETRY_MS = 10L * 60 * 1000
         private const val FULL_RETRY_MS = 30L * 60 * 1000
+
+        private const val NIGHT_WINDOW_MS = 30L * 60 * 1000
 
         /** After the 3 am reload starts: the reload goes first. */
         private const val NIGHT_DELAY_MS = 60_000L

@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Self-update: hand a downloaded WorldTV APK to Android's installer (user confirms). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- The 3 am reload and channel check: on time, not hours late (Android 12-13 grant it). -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <!-- Runs on TV boxes without a touchscreen; also installable on phones for testing. -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
