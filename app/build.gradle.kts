@@ -13,8 +13,8 @@ android {
         applicationId = "com.worldtv.iptvplayer"
         minSdk = 24
         targetSdk = 36
-        versionCode = 51
-        versionName = "2.34"
+        versionCode = 52
+        versionName = "2.35"
         // English only for now; keeps unused library translations out of the APK.
         resourceConfigurations += listOf("en")
         // TV boxes are ARM. Keeps the FFmpeg audio decoder to two ~1.4 MB native libraries.

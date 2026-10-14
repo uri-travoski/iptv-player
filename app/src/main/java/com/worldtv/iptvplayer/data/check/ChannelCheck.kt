@@ -72,7 +72,8 @@ class ChannelCheck(
         .readTimeout(READ_MS + 1000, TimeUnit.MILLISECONDS)
         .build()
 
-    private val roundStart = HashMap<Long, Long>()
+    /** When playback (WorldTV or another app) was last seen; checks start after [IDLE_MS] without it. */
+    @Volatile private var lastPlayback = 0L
 
     /** The job's work while it runs (one at a time). */
     @Volatile private var running: Job? = null
@@ -94,8 +95,12 @@ class ChannelCheck(
      * channel. Runs as a background job: Android freezes an app that isn't on screen, but not
      * while its job runs.
      */
-    fun request(playlistId: Long, fresh: Boolean = false) {
-        synchronized(roundStart) { if (fresh) roundStart.remove(playlistId) }
+    fun request(playlistId: Long, fresh: Boolean = false, now: Boolean = false) {
+        if (fresh) {
+            prefs.setCheckRoundStart(playlistId, 0)
+            prefs.setCheckRoundActive(playlistId, 0)
+        }
+        if (now) lastPlayback = 0 // Check now: no idle minute to wait for
         prefs.pendingChecks = prefs.pendingChecks + playlistId
         if (running?.isActive != true) scheduleJob(JOB_RUN, 0)
     }
@@ -127,11 +132,52 @@ class ChannelCheck(
      * server lets go of the connection at once.
      */
     fun beforePlay(url: String) {
+        lastPlayback = SystemClock.elapsedRealtime()
         val p = probing ?: return
         if (!sameServer(p, url)) return
         yielded = true
         call?.cancel()
     }
+
+    /** WorldTV stopped playing: a check that is due or unfinished starts after a minute of idle. */
+    fun afterStop() {
+        lastPlayback = SystemClock.elapsedRealtime()
+        if (running?.isActive == true) return
+        scope.launch {
+            if (prefs.pendingChecks.isNotEmpty() || duePlaylists(EVERY_MS).isNotEmpty()) scheduleJob(JOB_RUN, IDLE_MS)
+        }
+    }
+
+    /** What Settings shows: "33 / 335 · …". */
+    data class Status(
+        val checked: Int,
+        val total: Int,
+        /** Scanning time of the round (not the pauses while something played); -1 unknown. */
+        val activeMs: Long,
+        /** The round is still going (running now, or waiting for the box to be idle). */
+        val unfinished: Boolean,
+        val running: Boolean,
+        /** When the last round finished, 0 = never. */
+        val doneAt: Long,
+    )
+
+    suspend fun status(playlistId: Long): Status {
+        val targets = repo.channelsToCheck(playlistId).map { it.itemId }.toHashSet()
+        val current = prefs.checkRoundStart(playlistId)
+        val unfinished = current > 0
+        val last = prefs.checkLastRoundStart(playlistId)
+        // Checked before rounds were recorded (2.33-2.34): the last 7 days, time unknown (-1).
+        val since = if (unfinished) current else last.takeIf { it > 0 } ?: (System.currentTimeMillis() - VALID_MS)
+        val checked = repo.checkResults(playlistId, since).keys.count { it in targets }
+        val active = when {
+            unfinished -> prefs.checkRoundActive(playlistId)
+            last > 0 -> prefs.checkLastRoundActive(playlistId)
+            else -> -1L
+        }
+        return Status(checked, targets.size, active, unfinished, running?.isActive == true && probingId == playlistId, lastCheck(playlistId))
+    }
+
+    @Volatile private var probingId = -1L
 
     // ---- the job ----
 
@@ -209,7 +255,11 @@ class ChannelCheck(
         if (targets.isEmpty()) return Outcome.DONE
         val urls = if (p.isXtream) XtreamUrls(XtreamCredentials(p.url, p.username.orEmpty(), p.password.orEmpty())) else null
         val ext = if (p.formats.isEmpty() || "ts" in p.formats) "ts" else "m3u8"
-        val started = synchronized(roundStart) { roundStart.getOrPut(id) { System.currentTimeMillis() } }
+        val started = prefs.checkRoundStart(id).takeIf { it > 0 } ?: System.currentTimeMillis().also {
+            prefs.setCheckRoundStart(id, it)
+            prefs.setCheckRoundActive(id, 0)
+        }
+        probingId = id
         val done = repo.checkResults(id, started).keys
         val todo = targets.filter { it.itemId !in done }
         var checked = done.size
@@ -226,7 +276,11 @@ class ChannelCheck(
                 val url = t.streamUrl ?: urls?.live(t.itemId, ext) ?: continue
                 progress.value = "${checked + 1} / ${targets.size}"
                 val t0 = SystemClock.elapsedRealtime()
-                val result = probe(p, url)
+                val result = try {
+                    probe(p, url)
+                } finally {
+                    prefs.setCheckRoundActive(id, prefs.checkRoundActive(id) + SystemClock.elapsedRealtime() - t0)
+                }
                 Log.i(TAG, "${t.itemId}: $result in ${SystemClock.elapsedRealtime() - t0} ms$lastNote")
                 if (yielded) {
                     Log.i(TAG, "${p.name}: stopped for playback")
@@ -274,16 +328,19 @@ class ChannelCheck(
                     }
                 }
                 delay(GAP_MS) // lets the panel free the account's one connection
+                prefs.setCheckRoundActive(id, prefs.checkRoundActive(id) + GAP_MS)
             }
             save(id, (failRun + refusedRun).associateWith { false })
             failRun.clear()
         } finally {
             probing = null
             call = null
+            probingId = -1
         }
         val now = System.currentTimeMillis()
         val results = repo.checkResults(id, started)
-        synchronized(roundStart) { roundStart.remove(id) }
+        val activeMs = prefs.checkRoundActive(id)
+        prefs.finishCheckRound(id, started, activeMs)
         prefs.setLastChannelCheck(id, now)
         Log.i(TAG, "${p.name}: ${results.count { it.value }} of ${results.size} working")
         telemetry.event(
@@ -295,6 +352,7 @@ class ChannelCheck(
                 "channels" to results.size,
                 "working" to results.count { it.value },
                 "minutes" to (now - started) / 60_000,
+                "scan_seconds" to activeMs / 1000,
             ),
         )
         return Outcome.DONE
@@ -311,10 +369,21 @@ class ChannelCheck(
      * WorldTV playing another server: this one can still be checked.
      */
     private fun busy(p: Playlist): Boolean {
+        val now = SystemClock.elapsedRealtime()
         val playing = playingUrl()
-        if (playing != null) return sameServer(p, playing)
+        if (playing != null) {
+            if (!sameServer(p, playing)) return false
+            lastPlayback = now
+            return true
+        }
         val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        return audio.isMusicActive
+        if (audio.isMusicActive) {
+            lastPlayback = now
+            return true
+        }
+        // Nothing playing: start once it has been like that for a minute.
+        // (A few seconds' slack: the job that was set for a minute after playback may run early.)
+        return lastPlayback > 0 && now - lastPlayback < IDLE_MS - 5_000
     }
 
     private fun sameServer(p: Playlist, url: String): Boolean {
@@ -489,11 +558,11 @@ class ChannelCheck(
             am.setWindow(AlarmManager.RTC_WAKEUP, at, NIGHT_WINDOW_MS, nightAlarm())
         }
         val js = app.getSystemService(Context.JOB_SCHEDULER_SERVICE) as android.app.job.JobScheduler
-        if (js.getPendingJob(JOB_PERIODIC) == null) {
+        if (js.getPendingJob(JOB_PERIODIC)?.intervalMillis != PERIODIC_MS) {
             js.schedule(
                 android.app.job.JobInfo.Builder(JOB_PERIODIC, android.content.ComponentName(app, CheckJobService::class.java))
                     .setRequiredNetworkType(android.app.job.JobInfo.NETWORK_TYPE_ANY)
-                    .setPeriodic(EVERY_MS, 60L * 60 * 1000)
+                    .setPeriodic(PERIODIC_MS, 5L * 60 * 1000)
                     .setPersisted(true)
                     .build(),
             )
@@ -527,6 +596,12 @@ class ChannelCheck(
 
         /** Idle checks during the day, at most this often. */
         const val EVERY_MS = 4L * 60 * 60 * 1000
+
+        /** Nothing played for this long: the box counts as idle and a check may start. */
+        const val IDLE_MS = 60_000L
+
+        /** How often an idle box looks for a check that is due (Android's shortest period). */
+        private const val PERIODIC_MS = 15L * 60 * 1000
 
         /** At night everything is checked again unless done within this. */
         private const val NIGHT_RECHECK_MS = 60L * 60 * 1000

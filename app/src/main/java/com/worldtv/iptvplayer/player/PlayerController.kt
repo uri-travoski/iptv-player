@@ -59,6 +59,9 @@ class PlayerController(context: Context, http: OkHttpClient, private val telemet
 
     /** Called just before a stream starts, so a channel check on the same account lets go first. */
     var beforePlay: ((String) -> Unit)? = null
+
+    /** Called after playback stops (the channel check waits for a minute of idle). */
+    var afterStop: (() -> Unit)? = null
     private var retries = 0
 
     val player: ExoPlayer
@@ -359,10 +362,12 @@ class PlayerController(context: Context, http: OkHttpClient, private val telemet
 
     fun stop() {
         main.removeCallbacksAndMessages(null)
+        val wasPlaying = currentUrl != null
         currentUrl = null
         player.stop()
         player.clearMediaItems()
         emit(State.IDLE)
+        if (wasPlaying) afterStop?.invoke()
     }
 
     private fun emit(state: State) {

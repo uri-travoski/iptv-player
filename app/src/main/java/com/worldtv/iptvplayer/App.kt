@@ -214,6 +214,7 @@ class AppGraph(private val app: Application) {
     val player: PlayerController by lazy {
         PlayerController(app, http, telemetry).also {
             it.beforePlay = { url -> channelCheck.beforePlay(url) }
+            it.afterStop = { channelCheck.afterStop() }
             playerInstance = it
         }
     }
@@ -439,6 +440,25 @@ class Prefs(private val sp: SharedPreferences) {
     fun lastChannelCheck(playlistId: Long): Long = sp.getLong("channel_check_$playlistId", 0)
 
     fun setLastChannelCheck(playlistId: Long, at: Long) = sp.edit().putLong("channel_check_$playlistId", at).apply()
+
+    /** The channel check round going on for a playlist: when it started (ms), 0 = none. */
+    fun checkRoundStart(id: Long): Long = sp.getLong("check_round_$id", 0)
+
+    fun setCheckRoundStart(id: Long, at: Long) = sp.edit().putLong("check_round_$id", at).apply()
+
+    /** Scanning time of that round so far (ms; not the pauses). */
+    fun checkRoundActive(id: Long): Long = sp.getLong("check_active_$id", 0)
+
+    fun setCheckRoundActive(id: Long, ms: Long) = sp.edit().putLong("check_active_$id", ms).apply()
+
+    fun checkLastRoundStart(id: Long): Long = sp.getLong("check_last_round_$id", 0)
+
+    fun checkLastRoundActive(id: Long): Long = sp.getLong("check_last_active_$id", 0)
+
+    /** A round finished: it becomes the last one. */
+    fun finishCheckRound(id: Long, started: Long, activeMs: Long) = sp.edit()
+        .putLong("check_last_round_$id", started).putLong("check_last_active_$id", activeMs)
+        .putLong("check_round_$id", 0).putLong("check_active_$id", 0).apply()
 
     /** Playlists waiting for a channel check (kept if the app is closed meanwhile). */
     var pendingChecks: Set<Long>

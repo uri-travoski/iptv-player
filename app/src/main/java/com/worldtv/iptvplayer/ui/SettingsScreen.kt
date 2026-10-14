@@ -269,15 +269,31 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
     private suspend fun updateCheckSummary() {
         val p = graph.repo.playlist(prefs.activePlaylist)
         val n = if (p == null) 0 else graph.repo.checkCategories(p.id).size
-        val running = graph.channelCheck.progress.value
-        val last = if (p == null) 0 else graph.channelCheck.lastCheck(p.id)
-        checkSummary = when {
-            n == 0 -> activity.getString(R.string.set_off)
-            running != null -> activity.resources.getQuantityString(R.plurals.check_categories, n, n) + "  ·  " + activity.getString(R.string.check_running, running)
-            last > 0 -> activity.resources.getQuantityString(R.plurals.check_categories, n, n) + "  ·  " + activity.getString(R.string.check_last, Dates.dayTime(last))
-            else -> activity.resources.getQuantityString(R.plurals.check_categories, n, n)
+        checkSummary = if (p == null || n == 0) {
+            activity.getString(R.string.set_off)
+        } else {
+            val st = graph.channelCheck.status(p.id)
+            val count = "${st.checked} / ${st.total}"
+            val time = duration(st.activeMs)
+            when {
+                st.running -> activity.getString(R.string.check_status_running, count, time)
+                st.unfinished -> activity.getString(R.string.check_status_paused, count, time)
+                st.doneAt > 0 && st.activeMs < 0 -> activity.getString(R.string.check_status_done_old, count)
+                st.doneAt > 0 -> activity.getString(R.string.check_status_done, count, time)
+                else -> activity.getString(R.string.check_status_waiting, count)
+            }
         }
         refresh()
+    }
+
+    /** "45 s", "12 min 30 s", "1 h 5 min". */
+    private fun duration(ms: Long): String {
+        val s = ms / 1000
+        return when {
+            s < 60 -> "$s s"
+            s < 3600 -> "${s / 60} min ${s % 60} s"
+            else -> "${s / 3600} h ${s % 3600 / 60} min"
+        }
     }
 
     /**
@@ -297,7 +313,7 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
                 scope.launch {
                     graph.repo.setCheckCategories(p.id, ids)
                     if (ids.isNotEmpty() && (checkNow || ids.toSet() != chosen)) {
-                        graph.channelCheck.request(p.id, fresh = true)
+                        graph.channelCheck.request(p.id, fresh = true, now = checkNow)
                         activity.toast(activity.getString(R.string.check_started))
                     }
                     graph.channelCheck.updates.value = graph.channelCheck.updates.value + 1
