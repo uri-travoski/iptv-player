@@ -40,8 +40,9 @@ import java.util.concurrent.TimeUnit
  * runs while that account's server is playing in WorldTV (pressing play stops it at once), nor
  * while another app plays; it carries on later, from where it was. Results count for 7 days.
  *
- * Runs after a playlist is added or reloaded, at night after the 3 am reload, and every few
- * hours when the box is idle.
+ * Runs after a playlist is added or reloaded (every night after the 3 am reload): once all its
+ * channels are checked, the next check waits for the next reload. A check cut short (something
+ * played, the box went off) carries on once nothing has played for a minute.
  */
 class ChannelCheck(
     private val app: Context,
@@ -105,23 +106,23 @@ class ChannelCheck(
         if (running?.isActive != true) scheduleJob(JOB_RUN, 0)
     }
 
-    /** Every playlist with chosen categories whose last full check is older than [olderThanMs]. */
-    fun requestDue(olderThanMs: Long = EVERY_MS) {
+    /**
+     * Checks that are owed: a playlist never checked yet, or a round that was interrupted (the
+     * box was busy, off or the app closed). A finished check isn't repeated until the playlist
+     * is reloaded (every night at 3 am with Automatic refresh), or Check now.
+     */
+    fun requestDue() {
         scope.launch {
-            val due = duePlaylists(olderThanMs)
-            if (due.isNotEmpty()) {
+            val due = duePlaylists()
+            if (due.isNotEmpty() || prefs.pendingChecks.isNotEmpty()) {
                 prefs.pendingChecks = prefs.pendingChecks + due
                 if (running?.isActive != true) scheduleJob(JOB_RUN, 0)
             }
         }
     }
 
-    private suspend fun duePlaylists(olderThanMs: Long): List<Long> {
-        val now = System.currentTimeMillis()
-        return repo.playlists().map { it.id }.filter { id ->
-            val last = lastCheck(id)
-            repo.checkCategories(id).isNotEmpty() && (last <= 0 || now - last >= olderThanMs || now < last)
-        }
+    private suspend fun duePlaylists(): List<Long> = repo.playlists().map { it.id }.filter { id ->
+        repo.checkCategories(id).isNotEmpty() && (lastCheck(id) <= 0 || prefs.checkRoundStart(id) > 0)
     }
 
     /** When the last full check of [playlistId] finished (ms), 0 = never. */
@@ -144,7 +145,7 @@ class ChannelCheck(
         lastPlayback = SystemClock.elapsedRealtime()
         if (running?.isActive == true) return
         scope.launch {
-            if (prefs.pendingChecks.isNotEmpty() || duePlaylists(EVERY_MS).isNotEmpty()) scheduleJob(JOB_RUN, IDLE_MS)
+            if (prefs.pendingChecks.isNotEmpty() || duePlaylists().isNotEmpty()) scheduleJob(JOB_RUN, IDLE_MS)
         }
     }
 
@@ -204,8 +205,8 @@ class ChannelCheck(
                         Log.w(TAG, "night reload failed", e)
                     }
                 }
-                val olderThan = if (jobId == JOB_NIGHT) NIGHT_RECHECK_MS else EVERY_MS
-                prefs.pendingChecks = prefs.pendingChecks + duePlaylists(olderThan)
+                // (A reload above already asked for its check.)
+                prefs.pendingChecks = prefs.pendingChecks + duePlaylists()
                 var wait = 0L
                 while (true) {
                     val ids = prefs.pendingChecks.toList()
@@ -543,7 +544,7 @@ class ChannelCheck(
     // ---- waking up: alarms and jobs ----
 
     /**
-     * The 3 am alarm (it schedules the nightly job) and the every-few-hours job. Called whenever
+     * The 3 am alarm (it schedules the nightly job) and the 15-minute job that resumes unfinished checks. Called whenever
      * the app starts; setting them again changes nothing.
      */
     fun schedule() {
@@ -595,16 +596,12 @@ class ChannelCheck(
         const val VALID_MS = 7L * 24 * 60 * 60 * 1000
 
         /** Idle checks during the day, at most this often. */
-        const val EVERY_MS = 4L * 60 * 60 * 1000
-
         /** Nothing played for this long: the box counts as idle and a check may start. */
         const val IDLE_MS = 60_000L
 
         /** How often an idle box looks for a check that is due (Android's shortest period). */
         private const val PERIODIC_MS = 15L * 60 * 1000
 
-        /** At night everything is checked again unless done within this. */
-        private const val NIGHT_RECHECK_MS = 60L * 60 * 1000
 
         /** Reading time per channel once data flows. */
         const val READ_MS = 3500L
