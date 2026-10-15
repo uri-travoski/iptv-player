@@ -33,17 +33,15 @@ jobs:
         with:
           ref: ${{ env.TAG }}
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - uses: gradle/actions/setup-gradle@v4
-
-      - name: Tools and VLC (to bundle in the AppImage)
+      # Ubuntu's OpenJDK, not Temurin: Temurin's JVM carries its own C++ runtime, so VLC's C++
+      # modules (HLS) load the system's late and crash (2.38). The bundled Java comes from this JDK.
+      - name: JDK, tools and VLC (to bundle in the AppImage)
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q libvlc5 vlc-plugin-base libvlc-bin rpm
+          sudo apt-get install -y -q openjdk-21-jdk libvlc5 vlc-plugin-base libvlc-bin rpm
+          echo "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64" >> "$GITHUB_ENV"
+
+      - uses: gradle/actions/setup-gradle@v4
 
       - name: Tests and app image
         run: |

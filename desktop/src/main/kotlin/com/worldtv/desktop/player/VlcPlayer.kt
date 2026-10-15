@@ -99,6 +99,11 @@ class VlcPlayer {
         var f: MediaPlayerFactory? = null
         var p: EmbeddedMediaPlayer? = null
         try {
+            // VLC's C++ modules (HLS) crash when the C++ runtime is first loaded under them, in a
+            // JVM that doesn't use it itself (Temurin): load it now, globally, before VLC starts.
+            runCatching {
+                com.sun.jna.NativeLibrary.getInstance("libstdc++.so.6", mapOf(com.sun.jna.Library.OPTION_OPEN_FLAGS to (0x100 or 0x2)))
+            }
             // AppImage and Flatpak carry their own VLC: its folder comes in WORLDTV_VLC_DIR
             // (VLC_PLUGIN_PATH is set by their launcher too). Else the system's VLC is found.
             val bundled = System.getenv("WORLDTV_VLC_DIR")?.takeIf { java.io.File(it, "libvlc.so.5").exists() }
