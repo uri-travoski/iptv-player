@@ -152,7 +152,8 @@
 
             <TextView
                 android:id="@+id/hero_title"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
+                android:maxWidth="900dp"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="1"
@@ -175,7 +176,7 @@
 
             <TextView
                 android:id="@+id/hero_plot"
-                android:layout_width="match_parent"
+                android:layout_width="560dp"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:ellipsize="end"
@@ -250,6 +251,7 @@
             android:id="@+id/home_rows"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:clipChildren="false"
             android:layout_marginTop="18dp"
             android:orientation="vertical"
             android:visibility="gone" />

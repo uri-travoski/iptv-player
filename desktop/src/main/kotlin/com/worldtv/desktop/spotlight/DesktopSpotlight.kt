@@ -53,7 +53,8 @@ class DesktopSpotlight(private val graph: AppGraph) {
         if (prefs.spotlightPlaylist != playlist) slides.value = emptyList() else if (slides.value.isEmpty()) slides.value = load()
         val now = System.currentTimeMillis()
         val built = prefs.spotlightBuiltAt.takeIf { prefs.spotlightPlaylist == playlist } ?: 0
-        val due = built < AutoRefresh.lastNight(now, java.util.TimeZone.getDefault())
+        // Also due when the slides are missing (e.g. the app was closed while they were swapped in).
+        val due = built < AutoRefresh.lastNight(now, java.util.TimeZone.getDefault()) || !File(dir, "slides.json").exists()
         if (!due || now - prefs.spotlightAttemptAt < RETRY_MS) return
         build()
     }
@@ -118,8 +119,11 @@ class DesktopSpotlight(private val graph: AppGraph) {
         }
         if (playlist != prefs.activePlaylist) return
         File(staging, "slides.json").writeText(Slide.listToJson(picked))
-        dir.deleteRecursively()
+        // Old slides out of the way first, new ones in, then the old ones deleted: never left with none.
+        val old = File(Paths.data, "spotlight.old").apply { deleteRecursively() }
+        dir.renameTo(old)
         staging.renameTo(dir)
+        old.deleteRecursively()
         prefs.spotlightPlaylist = playlist
         prefs.spotlightBuiltAt = System.currentTimeMillis()
         slides.value = load()

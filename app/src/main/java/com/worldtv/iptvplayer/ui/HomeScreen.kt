@@ -152,6 +152,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     private fun newRow(index: Int): LinearLayout {
         val row = LinearLayout(activity)
         row.orientation = LinearLayout.HORIZONTAL
+        row.clipChildren = false // a focused card grows past its cell
         val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         if (index > 0) lp.topMargin = dp(ROW_GAP)
         rows.addView(row, lp)
@@ -177,8 +178,14 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
 
     private fun dp(v: Int) = (v * activity.resources.displayMetrics.density).toInt()
 
-    private fun cellParams(col: Int) = LinearLayout.LayoutParams(0, dp(CELL_HEIGHT), 1f).apply {
+    private fun cellParams(col: Int) = LinearLayout.LayoutParams(0, if (mobile) dp(CELL_HEIGHT) else cardHeight(), 1f).apply {
         if (col > 0) marginStart = dp(14)
+    }
+
+    /** TV app cards are 16:9: five across the width inside the screen's side margins. */
+    private fun cardHeight(): Int {
+        val width = (activity.resources.displayMetrics.widthPixels - dp(128) - (COLUMNS - 1) * dp(14)) / COLUMNS
+        return width * 9 / 16
     }
 
     private fun addSpace(row: LinearLayout, col: Int) {
@@ -186,7 +193,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     }
 
     private fun addSlot(row: LinearLayout, col: Int, index: Int, app: LaunchableApp): View {
-        val v = inflater.inflate(R.layout.row_app_slot, row, false)
+        val v = inflater.inflate(if (mobile) R.layout.row_app_slot else R.layout.row_app_card, row, false)
         v.id = View.generateViewId()
         v.tag = "slot:$index"
         v.setOnClickListener { Apps.launch(activity, app.pkg) }
@@ -194,6 +201,17 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         v.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_MENU && event.action == KeyEvent.ACTION_DOWN) { slotMenu(index, app); true } else false
         }
+        v.contentDescription = app.label
+        if (mobile) {
+            fillSlot(v, app)
+        } else {
+            fillCard(v, app)
+        }
+        row.addView(v, cellParams(col))
+        return v
+    }
+
+    private fun fillSlot(v: View, app: LaunchableApp) {
         val icon = v.findViewById<ImageView>(R.id.app_icon)
         val label = v.findViewById<TextView>(R.id.app_label)
         icon.imageTintList = null
@@ -205,9 +223,72 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
             icon.setImageDrawable(app.icon)
             label.text = app.label
         }
-        v.contentDescription = app.label
-        row.addView(v, cellParams(col))
-        return v
+    }
+
+    /**
+     * TV card: the app's TV banner fills it (it carries the name). Without one (phone apps): the
+     * whole icon, large, on the icon's main colour, with the name underneath. Rounded corners;
+     * grows a little on focus.
+     */
+    private fun fillCard(v: View, app: LaunchableApp) {
+        val art = v.findViewById<ImageView>(R.id.app_art)
+        val icon = v.findViewById<ImageView>(R.id.app_icon)
+        val label = v.findViewById<TextView>(R.id.app_label)
+        v.clipToOutline = true
+        v.outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: android.graphics.Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height, dp(14).toFloat())
+            }
+        }
+        v.setOnFocusChangeListener { view, focused ->
+            view.animate().scaleX(if (focused) 1.06f else 1f).scaleY(if (focused) 1.06f else 1f).setDuration(150).start()
+        }
+        val banner = app.banner
+        if (banner != null) {
+            art.scaleType = ImageView.ScaleType.FIT_XY // banners are 16:9, like the card
+            art.setImageDrawable(banner)
+            icon.visibility = View.GONE
+            label.visibility = View.GONE
+            return
+        }
+        // Phone apps: the whole icon, large, on its own main colour; the name in a colour that reads on it.
+        val color = cardColors[app.pkg] ?: 0xFF3A3A44.toInt()
+        v.setBackgroundColor(color)
+        icon.layoutParams = icon.layoutParams.apply { width = dp(64); height = dp(64) }
+        icon.setImageDrawable(app.icon)
+        label.text = app.label
+        val light = android.graphics.Color.luminance(color) > 0.55f
+        label.setTextColor(if (light) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt())
+        label.setShadowLayer(if (light) 0f else 4f, 0f, 0f, 0x99000000.toInt())
+    }
+
+    /** Main colour of each phone app's icon (computed with the slots, off the UI thread). */
+    private var cardColors: Map<String, Int> = emptyMap()
+
+    /** An icon's most common colour (opaque pixels, grouped coarsely), toned down a little. */
+    private fun iconColor(d: android.graphics.drawable.Drawable): Int {
+        val size = 32
+        val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        d.setBounds(0, 0, size, size)
+        d.draw(android.graphics.Canvas(bmp))
+        val counts = HashMap<Int, Int>()
+        val sums = HashMap<Int, IntArray>()
+        for (y in 0 until size) for (x in 0 until size) {
+            val p = bmp.getPixel(x, y)
+            if ((p ushr 24) < 200) continue
+            val r = (p shr 16) and 0xff
+            val g = (p shr 8) and 0xff
+            val b = p and 0xff
+            val key = (r shr 4 shl 8) or (g shr 4 shl 4) or (b shr 4)
+            counts[key] = (counts[key] ?: 0) + 1
+            val sum = sums.getOrPut(key) { IntArray(3) }
+            sum[0] += r; sum[1] += g; sum[2] += b
+        }
+        bmp.recycle()
+        val top = counts.maxByOrNull { it.value } ?: return 0xFF3A3A44.toInt()
+        val sum = sums.getValue(top.key)
+        val k = 0.9
+        return android.graphics.Color.rgb((sum[0] / top.value * k).toInt(), (sum[1] / top.value * k).toInt(), (sum[2] / top.value * k).toInt())
     }
 
     /** ⋮ top right: App Settings, All apps, System settings (TV: and adding an app to this screen). */
@@ -249,6 +330,10 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         val count = graph.prefs.appSlotCount
         val apps = withContext(graph.io) {
             (0 until count).mapNotNull { i -> graph.prefs.appSlot(i)?.let { pkg -> Apps.info(activity, pkg)?.let { i to it } } }
+        }
+        cardColors = withContext(graph.io) {
+            apps.map { it.second }.filter { it.banner == null && it.icon != null }
+                .associate { it.pkg to iconColor(it.icon!!.constantState?.newDrawable()?.mutate() ?: it.icon) }
         }
         buildRows(apps)
     }
@@ -303,6 +388,27 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
             activity.getString(R.string.valid_till, java.text.SimpleDateFormat("dd-MMM-yyyy", java.util.Locale.ENGLISH).format(java.util.Date(it * 1000)))
         }.orEmpty()
         account.visibility = if (expires == null) View.GONE else View.VISIBLE
+        if (p != null && expires != null) remindExpiry(p.id, expires * 1000)
+    }
+
+    /** "Your subscription expires in 3 days" (and 2), then "has expired": each once, OK closes it. */
+    private fun remindExpiry(playlistId: Long, expiresMs: Long) {
+        val now = System.currentTimeMillis()
+        val stage = com.worldtv.iptvplayer.ExpiryReminder.due(expiresMs, now, graph.prefs.expiryNotice(playlistId)) ?: return
+        graph.prefs.setExpiryNotice(playlistId, com.worldtv.iptvplayer.ExpiryReminder.record(expiresMs, stage))
+        val date = java.text.SimpleDateFormat("dd-MMM-yyyy", java.util.Locale.ENGLISH).format(java.util.Date(expiresMs))
+        val (title, text) = if (stage == com.worldtv.iptvplayer.ExpiryReminder.EXPIRED) {
+            activity.getString(R.string.expiry_expired_title) to activity.getString(R.string.expiry_expired_text, date)
+        } else {
+            val days = com.worldtv.iptvplayer.ExpiryReminder.daysLeft(expiresMs, now)
+            activity.getString(R.string.expiry_soon_title) to
+                activity.resources.getQuantityString(R.plurals.expiry_soon_text, days, days, date)
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(title)
+            .setMessage(text)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     /**

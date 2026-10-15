@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home app card (TV): the app's TV banner edge to edge; or, for apps without one, the icon's
+     own background with its symbol large and the name under it. White edge when focused. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:background="#33FFFFFF"
+    android:focusable="true"
+    android:foreground="@drawable/bg_app_card_focus">
+
+    <ImageView
+        android:id="@+id/app_art"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop" />
+
+    <ImageView
+        android:id="@+id/app_icon"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="center"
+        android:layout_marginBottom="12dp"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter" />
+
+    <TextView
+        android:id="@+id/app_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="1"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="8dp"
+        android:shadowColor="#99000000"
+        android:shadowRadius="4"
+        android:textColor="#FFFFFFFF"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+</FrameLayout>

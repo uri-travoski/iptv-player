@@ -450,6 +450,11 @@ class Prefs(private val sp: SharedPreferences) {
         get() = sp.getString("auto_refresh", null)?.takeIf { it in AutoRefresh.MODES } ?: AutoRefresh.DAILY
         set(v) = sp.edit().putString("auto_refresh", v).apply()
 
+    /** The last subscription reminder shown for a playlist ("endMs:stage", see ExpiryReminder). */
+    fun expiryNotice(playlistId: Long): String? = sp.getString("expiry_notice_$playlistId", null)
+
+    fun setExpiryNotice(playlistId: Long, v: String) = sp.edit().putString("expiry_notice_$playlistId", v).apply()
+
     // ---- home screen slider (Spotlight) ----
 
     /** The playlist the stored slides were picked from. */
