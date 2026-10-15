@@ -13,6 +13,11 @@ media3-ffmpeg = "1.9.0+1"
 coil = "3.2.0"
 junit = "4.13.2"
 profileinstaller = "1.4.1"
+# Linux desktop app (desktop/).
+compose-multiplatform = "1.9.3"
+vlcj = "4.12.1"
+sqlite-jdbc = "3.53.4.0"
+org-json = "20260814"
 
 [libraries]
 androidx-core = { module = "androidx.core:core-ktx", version.ref = "core" }
@@ -33,7 +38,15 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 # Installs the baseline profile on sideloaded boxes (no Play Store to do it).
 profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
 junit = { module = "junit:junit", version.ref = "junit" }
+coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
+vlcj = { module = "uk.co.caprica:vlcj", version.ref = "vlcj" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
+org-json = { module = "org.json:json", version.ref = "org-json" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }

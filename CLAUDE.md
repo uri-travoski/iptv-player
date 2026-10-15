@@ -38,10 +38,25 @@ MVP document: https://claude.ai/code/artifact/f7b3b895-aef4-4a3d-9555-9848fd1bd0
 - Xtream panels are inconsistent: read every field leniently (`JsonPull.nextStringOrNull/nextLongOrNull`),
   treat every field as optional.
 
+## Linux desktop app (`desktop/`)
+- Compose for Desktop + vlcj (libVLC 3). Desktop and laptop only (mouse and keyboard); the Android rules on
+  Views/Compose, APK size and "no libVLC" are for the Android app, not this one. IBO parity and the product rules
+  (playlist PIN guarding details/deletion/hidden categories, no built-in content) apply here too.
+- It compiles the Android data layer **unchanged** (`sharedSources` in `desktop/build.gradle.kts` lists the files).
+  Android classes those files touch have stand-ins in `desktop/src/main/{java,kotlin}/android/` (SQLite on sqlite-jdbc
+  with Android's per-thread transactions, ContentValues, Log). A shared file that starts using another Android API
+  breaks the desktop build: add a stand-in or keep the API out of shared code.
+- `Prefs` and `Telemetry` (no telemetry on desktop) have desktop versions in `desktop/src/main/kotlin/com/worldtv/iptvplayer/`.
+- Test it on a virtual display (Xvfb) against a local mock panel, never against real providers.
+- Packages: `desktop/packaging/linux/build-{deb,rpm,appimage,flatpak}.sh`. `.github/workflows/linux.yml` runs them
+  on GitHub when a release is **published** (the "bump n push" release), and attaches them to it. No build on push.
+  `-PdesktopOnly` leaves the Android module out (that job has no Android SDK set up).
+
 ## Build and test
 - `./gradlew testReleaseUnitTest assembleRelease`
 - Releases: bump `versionCode`/`versionName`, build locally, push, then create a GitHub Release (tag = version,
   pre-release) with `worldtv-<version>.apk` attached.
+- The release then gets Linux packages from `.github/workflows/linux.yml` (about 15 min after it is published).
 - CI: `.github/workflows/build.yml` is manual-only (`workflow_dispatch`) to save Actions minutes. It runs tests,
   builds the release APK, enforces the size cap, uploads the APK.
 - Release builds use the committed **test** keystore (`keystore/test-release.jks`). Never ship that key.

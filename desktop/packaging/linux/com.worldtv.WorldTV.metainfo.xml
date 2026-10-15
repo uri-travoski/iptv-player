@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.worldtv.WorldTV</id>
+  <name>WorldTV</name>
+  <summary>IPTV player for Xtream logins and M3U playlists</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <developer id="com.worldtv">
+    <name>WorldTV</name>
+  </developer>
+  <description>
+    <p>
+      WorldTV plays the IPTV playlist your provider gives you: live TV with a programme guide and
+      catch-up, films and series with resume, favourites and your own channel groups. It has no
+      channels of its own. Playback uses VLC.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.worldtv.WorldTV.desktop</launchable>
+  <url type="homepage">https://github.com/uri-travoski/iptv-player</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

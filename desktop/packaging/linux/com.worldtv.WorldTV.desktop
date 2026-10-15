@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=WorldTV
+GenericName=IPTV player
+Comment=Watch live TV, films and series from your IPTV playlist
+Exec=worldtv
+Icon=com.worldtv.WorldTV
+Terminal=false
+Categories=AudioVideo;Video;Player;TV;
+Keywords=iptv;tv;xtream;m3u;live;
+StartupWMClass=com-worldtv-desktop-MainKt

@@ -1,0 +1,38 @@
+# Flatpak of WorldTV. VLC comes from Flathub's own VLC (used as the base app), so it is the
+# same, maintained VLC build; the runtime is the one that VLC uses (build-flatpak.sh fills it in).
+app-id: com.worldtv.WorldTV
+runtime: org.kde.Platform
+runtime-version: '@RUNTIME_VERSION@'
+sdk: org.kde.Sdk
+base: org.videolan.VLC
+base-version: stable
+command: worldtv
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=pulseaudio
+  - --share=network
+  - --device=dri
+  # Subtitle files (Player > Subtitle file…)
+  - --filesystem=xdg-download:ro
+  - --filesystem=xdg-videos:ro
+  # Keeps the screen awake while playing
+  - --talk-name=org.freedesktop.ScreenSaver
+cleanup-commands:
+  # VLC's own menu entry and icons come with the base app: not exported as WorldTV's.
+  - rm -f /app/share/applications/vlc*.desktop /app/share/applications/org.videolan.VLC*.desktop
+  - rm -f /app/share/metainfo/*vlc* /app/share/metainfo/org.videolan*
+  - rm -f /app/share/icons/hicolor/*/apps/vlc* /app/share/icons/hicolor/*/apps/org.videolan.VLC*
+modules:
+  - name: worldtv
+    buildsystem: simple
+    build-commands:
+      - cp -a app /app/lib/worldtv
+      - install -Dm755 worldtv.sh /app/bin/worldtv
+      - install -Dm644 com.worldtv.WorldTV.desktop -t /app/share/applications
+      - install -Dm644 worldtv.png /app/share/icons/hicolor/256x256/apps/com.worldtv.WorldTV.png
+      - install -Dm644 worldtv.svg /app/share/icons/hicolor/scalable/apps/com.worldtv.WorldTV.svg
+      - install -Dm644 com.worldtv.WorldTV.metainfo.xml -t /app/share/metainfo
+    sources:
+      - type: dir
+        path: .

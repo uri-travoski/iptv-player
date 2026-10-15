@@ -15,4 +15,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "iptv-player"
-include(":app")
+// -PdesktopOnly: the Linux app alone (its CI has no Android SDK set up).
+if (!providers.gradleProperty("desktopOnly").isPresent) include(":app")
+include(":desktop")
