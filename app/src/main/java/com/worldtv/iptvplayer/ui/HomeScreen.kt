@@ -87,7 +87,10 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         activity.hideVideo()
         graph.player.stop()
         // Back to where the user was (e.g. the app slot they opened), else Live TV.
-        (lastFocusTag?.let { root.findViewWithTag<View>(it) } ?: live).requestFocus()
+        // TV: Live TV is selected when the app starts. "FromTouch": many boxes start in touch
+        // mode, where a plain request is ignored and the first key press lands on Reload.
+        val target = lastFocusTag?.let { root.findViewWithTag<View>(it) } ?: live
+        if (mobile) target.requestFocus() else target.requestFocusFromTouch()
         scope.launch { showAccount() }
         scope.launch { showSlots() } // an app may have been installed or removed meanwhile
         scope.launch { autoRefresh() }

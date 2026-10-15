@@ -25,6 +25,9 @@ class PlayItem(
     val type: ContentType? = null,
     val itemId: String? = null,
     val episodeId: String? = null,
+    /** Episodes: season and number ("S1 E6" on the series poster). */
+    val season: Int? = null,
+    val number: Int? = null,
     /** Movies and episodes: what to look up online subtitles by (Subtitles > Search online). */
     val subs: com.worldtv.iptvplayer.data.online.SubQuery? = null,
 )
@@ -247,7 +250,7 @@ class PlayerScreen(
         val pos = graph.player.positionMs
         val dur = graph.player.durationMs
         val playlistId = graph.prefs.activePlaylist
-        activity.lifecycleScope.launch { graph.repo.saveProgress(playlistId, type, id, item.episodeId, pos, dur, graph.adultNames()) }
+        graph.progressSave = activity.lifecycleScope.launch { graph.repo.saveProgress(playlistId, type, id, item.episodeId, pos, dur, graph.adultNames(), item.season, item.number) }
     }
 
     private fun seek(deltaMs: Long) {

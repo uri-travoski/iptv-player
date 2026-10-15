@@ -192,6 +192,14 @@ class PagedEntryAdapter(
 
     fun rowAt(position: Int): EntryRow? = pages[position / PAGE]?.getOrNull(position % PAGE)
 
+    /** Reads [position]'s page again (it was just watched: its progress changed). */
+    fun refreshAt(position: Int) {
+        val page = position / PAGE
+        if (page !in pages) return
+        pages.remove(page)
+        notifyRows(page * PAGE, minOf(PAGE, itemCount - page * PAGE))
+    }
+
     fun setFavourite(position: Int, favourite: Boolean) {
         val page = position / PAGE
         val rows = pages[page] ?: return
@@ -223,6 +231,8 @@ class PagedEntryAdapter(
             holder.name.text = ""
             holder.fav?.visibility = View.GONE
             holder.rating?.visibility = View.GONE
+            holder.watched?.visibility = View.GONE
+            holder.resume?.visibility = View.GONE
             showLogo(holder, null)
             holder.itemView.isActivated = false
             showHealth(holder, null)
@@ -234,6 +244,15 @@ class PagedEntryAdapter(
         holder.rating?.let { r ->
             val badge = com.worldtv.iptvplayer.data.source.Ratings.badge(row.rating)
             if (badge == null) r.visibility = View.GONE else { r.text = "★ $badge"; r.visibility = View.VISIBLE }
+        }
+        holder.watched?.let { bar ->
+            val started = row.durationMs > 0 && row.watchedMs > 0
+            bar.visibility = if (started) View.VISIBLE else View.GONE
+            if (started) bar.progress = (row.watchedMs * 1000 / row.durationMs).toInt().coerceIn(20, 1000)
+        }
+        holder.resume?.let { r ->
+            r.text = row.resumeEpisode
+            r.visibility = if (row.resumeEpisode.isNullOrEmpty()) View.GONE else View.VISIBLE
         }
         showLogo(holder, row.logo)
         holder.itemView.isActivated = row.itemId == playingItemId
@@ -328,6 +347,8 @@ class PagedEntryAdapter(
         val logo: ImageView = view.findViewById(R.id.logo)
         val name: TextView = view.findViewById(R.id.name)
         val fav: TextView? = view.findViewById(R.id.fav)
+        val watched: android.widget.ProgressBar? = view.findViewById(R.id.watched)
+        val resume: TextView? = view.findViewById(R.id.resume)
         /** Channel rows: the green dot of a working channel. */
         val ok: TextView? = view.findViewById(R.id.ok)
         /** Posters: the provider's rating, top left (only when there is one). */

@@ -199,7 +199,11 @@ fun VodScreen(type: ContentType) {
                         ) {
                             items(r.count) { i ->
                                 val row = r[i]
-                                PosterCard(row?.name ?: "", row?.logo, row?.rating, row?.favourite == true) {
+                                PosterCard(
+                                    row?.name ?: "", row?.logo, row?.rating, row?.favourite == true,
+                                    watched = row?.takeIf { it.durationMs > 0 && it.watchedMs > 0 }?.let { it.watchedMs.toFloat() / it.durationMs },
+                                    episode = row?.resumeEpisode?.takeIf { it.isNotEmpty() },
+                                ) {
                                     val p = playlist
                                     if (row != null && p != null) nav.push(Route.Detail(p, type, row))
                                 }
@@ -213,7 +217,17 @@ fun VodScreen(type: ContentType) {
 }
 
 @Composable
-fun PosterCard(name: String, image: String?, rating: String?, favourite: Boolean, onClick: () -> Unit) {
+fun PosterCard(
+    name: String,
+    image: String?,
+    rating: String?,
+    favourite: Boolean,
+    /** Started: how far (0–1). */
+    watched: Float? = null,
+    /** Series started: "S1 E6". */
+    episode: String? = null,
+    onClick: () -> Unit,
+) {
     val wt = LocalWt.current
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
@@ -228,6 +242,13 @@ fun PosterCard(name: String, image: String?, rating: String?, favourite: Boolean
             if (image != null) AsyncImage(image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             Ratings.badge(rating)?.let { Badge("★ $it", Color(0xCC000000), Modifier.align(Alignment.TopEnd).padding(6.dp)) }
             if (favourite) Icon(Icons.Default.Star, "Favourite", tint = wt.accent, modifier = Modifier.align(Alignment.TopStart).padding(6.dp).size(20.dp))
+            if (episode != null) Badge(episode, Color(0xCC000000), Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 12.dp))
+            if (watched != null) {
+                // Inside a dark track, so it shows on a poster of the same colour.
+                Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(7.dp).background(Color(0xCC000000)).padding(2.dp)) {
+                    Box(Modifier.fillMaxWidth(watched.coerceIn(0.02f, 1f)).fillMaxHeight().background(wt.accent))
+                }
+            }
         }
         Spacer(Modifier.height(6.dp))
         Text(name, color = if (hovered) wt.textPrimary else wt.textPrimary.copy(alpha = 0.9f), fontSize = 14.sp, fontWeight = if (hovered) FontWeight.Medium else FontWeight.Normal, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.height(38.dp))

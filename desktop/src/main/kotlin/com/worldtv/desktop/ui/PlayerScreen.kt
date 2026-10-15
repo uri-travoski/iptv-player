@@ -86,7 +86,7 @@ fun PlayerScreen(route: Route.Player) {
         if (dur <= 0 && pos <= 0) return
         // In the app's scope: leaving the player must not cancel the last save.
         graph.appScope.launch {
-            graph.repo.saveProgress(route.playlistId, type, id, it.episodeId, pos, dur, graph.adultNames())
+            graph.repo.saveProgress(route.playlistId, type, id, it.episodeId, pos, dur, graph.adultNames(), it.season, it.number)
             graph.progressSaved.value = graph.progressSaved.value + 1
         }
     }

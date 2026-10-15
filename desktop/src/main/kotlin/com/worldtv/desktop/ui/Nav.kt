@@ -14,6 +14,9 @@ data class PlayItem(
     val type: ContentType? = null,
     val itemId: String? = null,
     val episodeId: String? = null,
+    /** Episodes: season and number ("S1 E6" on the series poster). */
+    val season: Int? = null,
+    val number: Int? = null,
 )
 
 /** The screens, as in the Android app. */

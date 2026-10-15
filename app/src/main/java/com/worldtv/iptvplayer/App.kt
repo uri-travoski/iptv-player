@@ -148,6 +148,9 @@ class AppGraph(private val app: Application) {
 
     val repo: Repository by lazy { Repository(db, io, scanDispatcher) }
 
+    /** The player's last progress write, which the title page and grid wait for before reading it back. */
+    @Volatile var progressSave: kotlinx.coroutines.Job? = null
+
     /**
      * Re-checks [playlistIds] (all when null) for adult content in the background. Callers never
      * wait for it; [done] runs on the main thread afterwards. Failures are logged, never thrown.

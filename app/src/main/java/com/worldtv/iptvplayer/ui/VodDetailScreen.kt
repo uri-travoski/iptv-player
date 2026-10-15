@@ -109,7 +109,9 @@ class VodDetailScreen(
     }
 
     private suspend fun loadProgress() {
+        graph.progressSave?.join()
         progress = graph.repo.progress(playlist.id, type, row.itemId)
+        if (isEpisodic) episodeAdapter.watched = graph.repo.episodeProgress(playlist.id, row.itemId)
         updatePlayLabel()
     }
 
@@ -327,6 +329,8 @@ class VodDetailScreen(
                 type = type,
                 itemId = row.itemId,
                 episodeId = it.id,
+                season = it.season,
+                number = it.number,
                 subs = SubQuery.fromName(row.name, info?.released, info?.tmdbId ?: extras?.tmdbId, info?.imdbId, season = it.season.takeIf { s -> s > 0 } ?: 1, episode = it.number),
             )
         }
@@ -380,6 +384,13 @@ class VodDetailScreen(
                 notifyDataSetChanged()
             }
 
+        /** How far each episode was watched: ✓ when finished, "30 min in" when started. */
+        var watched: Map<String, com.worldtv.iptvplayer.data.repo.Progress> = emptyMap()
+            set(value) {
+                field = value
+                notifyDataSetChanged()
+            }
+
         init {
             setHasStableIds(true)
         }
@@ -393,10 +404,14 @@ class VodDetailScreen(
         override fun onBindViewHolder(holder: VH, position: Int) {
             val e = items[position]
             val mins = e.durationSecs / 60
+            val w = watched[e.id]
             holder.text.text = buildString {
+                if (w?.finished == true) append("✓  ")
                 append("E").append(e.number).append("   ").append(e.title)
                 if (mins > 0) append("   ·   ").append(mins).append(" min")
+                if (w != null && !w.finished) append("   ·   ▶ ").append(if (w.positionMs < 60_000) "${w.positionMs / 1000} s in" else "${w.positionMs / 60_000} min in")
             }
+            holder.text.alpha = if (w?.finished == true) 0.7f else 1f
         }
 
         inner class VH(val text: TextView) : RecyclerView.ViewHolder(text) {

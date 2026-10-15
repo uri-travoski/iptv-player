@@ -142,8 +142,12 @@ fun VodDetailScreen(route: Route.Detail) {
         }
     }
 
+    var watched by remember { mutableStateOf<Map<String, Progress>>(emptyMap()) }
     val saved by graph.progressSaved.collectAsState()
-    LaunchedEffect(saved) { if (saved > 0) progress = graph.repo.progress(playlist.id, type, row.itemId) }
+    LaunchedEffect(saved) {
+        if (saved > 0) progress = graph.repo.progress(playlist.id, type, row.itemId)
+        if (episodic) watched = graph.repo.episodeProgress(playlist.id, row.itemId)
+    }
 
     val seasons = episodes.map { it.season }.distinct()
     val seasonEpisodes = episodes.filter { it.season == season }
@@ -152,7 +156,7 @@ fun VodDetailScreen(route: Route.Detail) {
         val u = urls ?: return
         val items = list.map {
             val prefix = it.season.takeIf { s -> s > 0 }?.let { s -> "S$s " } ?: ""
-            PlayItem(u.episode(it.id, it.containerExt ?: "mp4"), "${row.name} · ${prefix}E${it.number} ${it.title}", type, row.itemId, it.id)
+            PlayItem(u.episode(it.id, it.containerExt ?: "mp4"), "${row.name} · ${prefix}E${it.number} ${it.title}", type, row.itemId, it.id, it.season, it.number)
         }
         nav.push(Route.Player(playlist.id, items, index, startMs))
     }
@@ -247,7 +251,7 @@ fun VodDetailScreen(route: Route.Detail) {
                                 Spacer(Modifier.height(10.dp))
                                 LazyColumn(Modifier.fillMaxSize()) {
                                     itemsIndexed(seasonEpisodes, key = { _, e -> e.id }) { idx, e ->
-                                        EpisodeRow(e, progress?.takeIf { it.episodeId == e.id }) {
+                                        EpisodeRow(e, watched[e.id] ?: progress?.takeIf { it.episodeId == e.id }) {
                                             val p = progress
                                             playEpisodes(seasonEpisodes, idx, if (p != null && p.episodeId == e.id) p.positionMs else 0)
                                         }
@@ -284,10 +288,14 @@ private fun EpisodeRow(e: Episode, progress: Progress?, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("${e.number}. ${e.title}", color = wt.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                (if (progress?.finished == true) "✓  " else "") + "${e.number}. ${e.title}",
+                color = if (progress?.finished == true) wt.textSecondary else wt.textPrimary,
+                fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
             val line = listOfNotNull(e.durationSecs.takeIf { it > 0 }?.let { "${(it + 59) / 60} min" }, e.plot?.takeIf { it.isNotBlank() }).joinToString(" · ")
             if (line.isNotEmpty()) Text(line, color = wt.textSecondary, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (progress != null && progress.durationMs > 0) {
+            if (progress != null && progress.durationMs > 0 && !progress.finished) {
                 Spacer(Modifier.height(4.dp))
                 LinearProgressIndicator(
                     progress = { (progress.positionMs.toFloat() / progress.durationMs).coerceIn(0f, 1f) },

@@ -68,10 +68,18 @@ data class EntryRow(
     val rating: String? = null,
     /** Movies/series: release year, when known (only filled where it is needed). */
     val year: String? = null,
+    /** Movies and series started: how far (ms) of how long; 0 when not started or unknown. */
+    val watchedMs: Long = 0,
+    val durationMs: Long = 0,
+    /** Series started: the episode it is at ("S1 E6"). */
+    val resumeEpisode: String? = null,
 )
 
 /** Saved playback point. [episodeId] is set for series. */
-data class Progress(val episodeId: String?, val positionMs: Long, val durationMs: Long)
+data class Progress(val episodeId: String?, val positionMs: Long, val durationMs: Long) {
+    /** Watched to the end (as Continue watching counts it). */
+    val finished get() = durationMs > 0 && positionMs >= durationMs * Repository.END_PERCENT / 100
+}
 
 /** The stored fields a movie or series page shows before (or without) the panel's info call. */
 data class EntryDetails(val rating: String?, val plot: String?, val ext: String?, val added: Long = 0)
@@ -149,6 +157,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             w.delete("category", "playlist_id = ?", args)
             w.delete("favourite", "playlist_id = ?", args)
             w.delete("progress", "playlist_id = ?", args)
+            w.delete("episode_progress", "playlist_id = ?", args)
             w.delete("hidden_category", "playlist_id = ?", args)
             w.delete("hidden_item", "playlist_id = ?", args)
             w.delete("shown_category", "playlist_id = ?", args)
@@ -668,8 +677,12 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             db.readableDatabase.rawQuery(
                 """SELECT e.item_id, e.name, e.logo, e.stream_url, e.ext, e.catchup_days,
                    EXISTS(SELECT 1 FROM favourite f WHERE f.playlist_id = e.playlist_id
-                          AND f.type = e.type AND f.item_id = e.item_id), e.rating
-                   FROM entry e $where ORDER BY ${order(key, sort, hasLiveOrder(playlistId, type))} LIMIT $limit OFFSET $offset""",
+                          AND f.type = e.type AND f.item_id = e.item_id), e.rating,
+                   p.position_ms, p.duration_ms, ep.season, ep.number
+                   FROM entry e
+                   LEFT JOIN progress p ON p.playlist_id = e.playlist_id AND p.type = e.type AND p.item_id = e.item_id
+                   LEFT JOIN episode_progress ep ON ep.playlist_id = e.playlist_id AND ep.series_id = e.item_id AND ep.episode_id = p.episode_id
+                   $where ORDER BY ${order(key, sort, hasLiveOrder(playlistId, type))} LIMIT $limit OFFSET $offset""",
                 args,
             ).use { c ->
                 val out = ArrayList<EntryRow>(c.count)
@@ -683,6 +696,10 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
                         catchupDays = c.getInt(5),
                         favourite = c.getInt(6) != 0,
                         rating = c.getStringOrNull(7),
+                        watchedMs = c.getLong(8),
+                        durationMs = c.getLong(9),
+                        resumeEpisode = if (c.isNull(11)) null else
+                            (if (c.isNull(10) || c.getInt(10) <= 0) "" else "S${c.getInt(10)} ") + "E${c.getInt(11)}",
                     )
                 }
                 out
@@ -848,6 +865,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         if (types.isEmpty()) return@withContext
         val w = db.writableDatabase
         w.delete("progress", "type IN (${types.joinToString(",") { it.ordinal.toString() }})", null)
+        if (ContentType.SERIES in types) w.delete("episode_progress", null, null)
         if (ContentType.LIVE in types) {
             w.delete("live_watch", null, null)
             w.delete("most_watched", null, null)
@@ -1016,6 +1034,18 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
 
     // ---- continue watching ----
 
+    /** How far each watched episode of series [seriesId] got, by episode id. */
+    suspend fun episodeProgress(playlistId: Long, seriesId: String): Map<String, Progress> = withContext(io) {
+        db.readableDatabase.rawQuery(
+            "SELECT episode_id, position_ms, duration_ms FROM episode_progress WHERE playlist_id = ? AND series_id = ?",
+            arrayOf(playlistId.toString(), seriesId),
+        ).use { c ->
+            val out = HashMap<String, Progress>(c.count)
+            while (c.moveToNext()) out[c.getString(0)] = Progress(c.getString(0), c.getLong(1), c.getLong(2))
+            out
+        }
+    }
+
     suspend fun progress(playlistId: Long, type: ContentType, itemId: String): Progress? = withContext(io) {
         db.readableDatabase.rawQuery(
             "SELECT episode_id, position_ms, duration_ms FROM progress WHERE playlist_id = ? AND type = ? AND item_id = ?",
@@ -1036,18 +1066,36 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         positionMs: Long,
         durationMs: Long,
         names: AdultNames,
+        /** Episodes: season and episode number, for "S1 E6" on the poster. */
+        season: Int? = null,
+        number: Int? = null,
     ) = withContext(io) {
         val w = db.writableDatabase
         if (isAdult(playlistId, type, itemId, names)) {
             w.delete("progress", "playlist_id = ? AND type = ? AND item_id = ?", arrayOf(playlistId.toString(), type.ordinal.toString(), itemId))
+            w.delete("episode_progress", "playlist_id = ? AND series_id = ?", arrayOf(playlistId.toString(), itemId))
             return@withContext
         }
         val nearEnd = durationMs > 0 && positionMs >= durationMs * END_PERCENT / 100
+        // Every episode keeps its own point (✓ when finished); a few seconds' look doesn't count.
+        if (episodeId != null && durationMs > 0 && (positionMs >= MIN_RESUME_MS || nearEnd)) {
+            val v = ContentValues().apply {
+                put("playlist_id", playlistId)
+                put("series_id", itemId)
+                put("episode_id", episodeId)
+                put("season", season)
+                put("number", number)
+                put("position_ms", if (nearEnd) durationMs else positionMs)
+                put("duration_ms", durationMs)
+                put("updated", System.currentTimeMillis())
+            }
+            w.insertWithOnConflict("episode_progress", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
+        }
         if (positionMs < MIN_RESUME_MS || nearEnd) {
-            // An early stop in a *different* episode shouldn't wipe the series' saved point.
-            val where = if (episodeId == null) "" else " AND (episode_id = ? OR ? = 1)"
+            // A stop or finish in a *different* episode leaves the series' saved point alone.
+            val where = if (episodeId == null) "" else " AND episode_id = ?"
             val args = arrayListOf(playlistId.toString(), type.ordinal.toString(), itemId)
-            if (episodeId != null) { args += episodeId; args += if (nearEnd) "1" else "0" }
+            if (episodeId != null) args += episodeId
             w.delete("progress", "playlist_id = ? AND type = ? AND item_id = ?$where", args.toTypedArray())
             return@withContext
         }
@@ -1252,7 +1300,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         fun isBuiltIn(key: String) = key.startsWith("\u0000")
 
         private val RESET_TABLES = listOf(
-            "entry", "category", "favourite", "progress", "hidden_category", "hidden_item", "shown_category", "shown_item",
+            "entry", "category", "favourite", "progress", "episode_progress", "hidden_category", "hidden_item", "shown_category", "shown_item",
             "user_group_item", "user_group", "live_watch", "most_watched", "live_order", "category_order", "check_category", "channel_check", "playlist",
         )
 

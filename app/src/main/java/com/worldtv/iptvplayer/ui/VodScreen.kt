@@ -90,10 +90,19 @@ class VodScreen(activity: MainActivity, private val type: ContentType) : Screen(
             // "Continue watching" changes order (or loses the title) after playback.
             val reload = categoryKey == Repository.KEY_CONTINUE || (fav != null && categoryKey == Repository.KEY_FAV)
             if (reload) {
-                scope.launch { reloadList(); focusPoster(if (categoryKey == Repository.KEY_CONTINUE) 0 else lastOpened) }
+                scope.launch {
+                    graph.progressSave?.join()
+                    reloadList()
+                    focusPoster(if (categoryKey == Repository.KEY_CONTINUE) 0 else lastOpened)
+                }
             } else {
                 if (fav != null) posterAdapter.setFavourite(lastOpened, fav)
                 focusPoster(lastOpened)
+                val at = lastOpened
+                scope.launch {
+                    graph.progressSave?.join()
+                    posterAdapter.refreshAt(at) // its progress may have moved
+                }
             }
         }
     }

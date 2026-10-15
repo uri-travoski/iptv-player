@@ -49,6 +49,36 @@
             android:textColor="#FFF5B942"
             android:textSize="16sp"
             android:visibility="gone" />
+
+        <!-- Series started: the episode it is at ("S1 E6"). -->
+        <TextView
+            android:id="@+id/resume"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:layout_marginBottom="6dp"
+            android:background="?attr/wtScrim"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:textColor="#FFFFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <!-- Started: how far, along the bottom of the poster, inside a dark track so it shows on
+             a poster of the same colour. -->
+        <ProgressBar
+            android:id="@+id/watched"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="7dp"
+            android:layout_gravity="bottom"
+            android:background="#CC000000"
+            android:padding="2dp"
+            android:max="1000"
+            android:progressBackgroundTint="#00000000"
+            android:progressTint="?attr/wtAccent"
+            android:visibility="gone" />
     </FrameLayout>
 
     <TextView

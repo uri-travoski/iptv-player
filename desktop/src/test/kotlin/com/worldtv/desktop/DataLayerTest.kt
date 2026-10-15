@@ -100,6 +100,33 @@ class DataLayerTest {
     }
 
     @Test
+    fun episodesKeepTheirOwnProgress(): Unit = runBlocking {
+        val id = repo.addPlaylist("Test", Playlist.KIND_M3U, "$base/list.m3u", null, null)
+        val names = AdultNames(AdultNames.DEFAULT_CATEGORY_WORDS, AdultNames.DEFAULT_ENTRY_WORDS)
+        val s = ContentType.SERIES
+        repo.saveProgress(id, s, "show", "e2", 40_000, 100_000, names, 1, 2)
+        assertEquals("e2", repo.progress(id, s, "show")?.episodeId)
+
+        // Finishing another episode ticks it off but keeps the series' resume point.
+        repo.saveProgress(id, s, "show", "e1", 97_000, 100_000, names, 1, 1)
+        var eps = repo.episodeProgress(id, "show")
+        assertTrue(eps.getValue("e1").finished)
+        assertFalse(eps.getValue("e2").finished)
+        assertEquals("e2", repo.progress(id, s, "show")?.episodeId)
+
+        // A few seconds' look doesn't count.
+        repo.saveProgress(id, s, "show", "e3", 10_000, 100_000, names, 1, 3)
+        eps = repo.episodeProgress(id, "show")
+        assertFalse("e3" in eps)
+        assertEquals("e2", repo.progress(id, s, "show")?.episodeId)
+
+        // Finishing the resume episode clears the resume point.
+        repo.saveProgress(id, s, "show", "e2", 99_000, 100_000, names, 1, 2)
+        assertEquals(null, repo.progress(id, s, "show"))
+        assertTrue(repo.episodeProgress(id, "show").getValue("e2").finished)
+    }
+
+    @Test
     fun readsGoOnWhileALoadWrites(): Unit = runBlocking {
         val id = repo.addPlaylist("Test", Playlist.KIND_M3U, "$base/list.m3u", null, null)
         syncer.sync(repo.playlist(id)!!) {}
