@@ -148,6 +148,9 @@ fun LiveScreen() {
     var restored by remember { mutableStateOf(false) }
     /** Typing in the search box: letter shortcuts (M, A, S, F…) are off. */
     var typing by remember { mutableStateOf(false) }
+    /** Filter above the categories (their names). */
+    val catSearch = remember { mutableStateOf("") }
+    val shownCats = catSearch.value.trim().let { q -> if (q.isEmpty()) categories else categories.filter { it.name.contains(q, ignoreCase = true) } }
 
     val urls = playlist?.takeIf { it.isXtream }?.let { XtreamUrls(XtreamCredentials(it.url, it.username.orEmpty(), it.password.orEmpty())) }
     val liveExt = playlist?.formats?.let { if (it.isEmpty() || "ts" in it) "ts" else "m3u8" } ?: "ts"
@@ -366,9 +369,9 @@ fun LiveScreen() {
         if (paneCats) {
             when (e.key) {
                 Key.DirectionUp -> catCursor = (catCursor - 1).coerceAtLeast(0)
-                Key.DirectionDown -> catCursor = (catCursor + 1).coerceAtMost(categories.lastIndex)
+                Key.DirectionDown -> catCursor = (catCursor + 1).coerceAtMost(shownCats.lastIndex)
                 Key.DirectionRight, Key.Enter, Key.NumPadEnter -> {
-                    categories.getOrNull(catCursor)?.let { search.value = ""; catKey = it.key }
+                    shownCats.getOrNull(catCursor)?.let { search.value = ""; catKey = it.key }
                     paneCats = false
                 }
                 else -> return false
@@ -395,6 +398,7 @@ fun LiveScreen() {
     // Keep the cursor rows in view.
     LaunchedEffect(cursor) { scrollIntoView(listState, cursor) }
     LaunchedEffect(catCursor) { scrollIntoView(catState, catCursor) }
+    LaunchedEffect(catSearch.value) { catCursor = 0 }
 
     BackHandler {
         when {
@@ -419,13 +423,14 @@ fun LiveScreen() {
         if (!fullscreen) {
             ThemedBackground {
                 Column(Modifier.fillMaxSize()) {
-                    TopBar("Live TV", { nav.back() }, subtitle = playlist?.name) {
-                        SearchField(search, "Search channels (Ctrl+F)", Modifier.width(320.dp), searchFocus, onFocus = { typing = it })
-                    }
+                    TopBar("Live TV", { nav.back() }, subtitle = playlist?.name)
                     Row(Modifier.fillMaxSize().padding(start = 8.dp, end = 16.dp, bottom = 12.dp)) {
-                        // Categories
-                        LazyColumn(Modifier.width(250.dp).fillMaxHeight(), state = catState) {
-                            itemsIndexed(categories, key = { _, c -> c.key }) { i, c ->
+                        // Categories, with their own search on top.
+                        Column(Modifier.width(250.dp).fillMaxHeight()) {
+                        SearchField(catSearch, "Search categories", Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, bottom = 6.dp), onFocus = { typing = it })
+                        if (shownCats.isEmpty()) CenterNote("No category by that name", Modifier.fillMaxWidth())
+                        LazyColumn(Modifier.fillMaxSize(), state = catState) {
+                            itemsIndexed(shownCats, key = { _, c -> c.key }) { i, c ->
                                 Box {
                                     ListRow(
                                         selected = c.key == catKey && search.value.isBlank(),
@@ -469,15 +474,18 @@ fun LiveScreen() {
                                     })
                                 }
                             }
-                            item {
+                            if (catSearch.value.isBlank()) item {
                                 ListRow(selected = false, onClick = { newGroup(null) }) {
                                     Text("+ New group", color = wt.textSecondary, fontSize = 14.sp)
                                 }
                             }
                         }
+                        }
                         Spacer(Modifier.width(8.dp))
                         // Channels
-                        Column(Modifier.width(380.dp).fillMaxHeight().clip(RoundedCornerShape(10.dp)).background(wt.slot)) {
+                        Column(Modifier.width(380.dp).fillMaxHeight()) {
+                        SearchField(search, "Search channels (Ctrl+F)", Modifier.fillMaxWidth().padding(bottom = 6.dp), searchFocus, onFocus = { typing = it })
+                        Column(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(wt.slot)) {
                             val r = rows
                             val title = if (Repository.isSearch(listKey)) "Results for “${search.value.trim()}”" else categories.firstOrNull { it.key == catKey }?.name ?: ""
                             Text(
@@ -537,6 +545,7 @@ fun LiveScreen() {
                                     }
                                 }
                             }
+                        }
                         }
                         Spacer(Modifier.width(16.dp))
                         // Preview and guide

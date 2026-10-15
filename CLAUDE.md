@@ -63,7 +63,8 @@ MVP document: https://claude.ai/code/artifact/f7b3b895-aef4-4a3d-9555-9848fd1bd0
 ## Build and test
 - `./gradlew testReleaseUnitTest assembleRelease`
 - Releases: bump `versionCode`/`versionName`, build locally, push, then create a GitHub Release (tag = version,
-  pre-release) with `worldtv-<version>.apk` attached.
+  a full release marked latest, not a pre-release) with `worldtv-<version>.apk` and the same file as `worldtv.apk`
+  attached: family members download https://github.com/uri-travoski/iptv-player/releases/latest/download/worldtv.apk.
 - The release then gets Linux packages from `.github/workflows/linux.yml` (about 15 min after it is published).
 - CI: `.github/workflows/build.yml` is manual-only (`workflow_dispatch`) to save Actions minutes. It runs tests,
   builds the release APK, enforces the size cap, uploads the APK.
