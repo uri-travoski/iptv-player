@@ -99,11 +99,20 @@ class Tmdb(private val http: OkHttpClient, private val io: CoroutineDispatcher, 
 
     /**
      * Recent, family-safe releases, most popular first ([pages] of 20). Movies: released in the
-     * last [days], US certificate PG-13 or lower (TMDB lists only films that have one), no horror.
+     * last [days], with one of [certs] in [certCountry] (TMDB lists only films that have one), no horror.
      * Series: an episode aired in the last [days]; no news, reality or talk shows. The series'
      * own rating is checked separately ([familySeries]).
      */
-    suspend fun recentReleases(series: Boolean, days: Int, pages: Int): List<Release> = withContext(io) {
+    suspend fun recentReleases(
+        series: Boolean,
+        days: Int,
+        pages: Int,
+        /** Original languages ("hi|ta|…"), null for any. */
+        languages: List<String>? = null,
+        /** Movies: whose certificates count (default the US, PG-13 or lower). */
+        certCountry: String = "US",
+        certs: List<String> = listOf("G", "PG", "PG-13"),
+    ): List<Release> = withContext(io) {
         val f = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val today = f.format(java.util.Date())
         val since = f.format(java.util.Date(System.currentTimeMillis() - days * 86_400_000L))
@@ -115,6 +124,7 @@ class Tmdb(private val http: OkHttpClient, private val io: CoroutineDispatcher, 
                     .addQueryParameter("include_adult", "false")
                     .addQueryParameter("sort_by", "popularity.desc")
                     .addQueryParameter("page", page.toString())
+                if (languages != null) u.addQueryParameter("with_original_language", languages.joinToString("|"))
                 if (series) {
                     u.addQueryParameter("air_date.gte", since)
                         .addQueryParameter("air_date.lte", today)
@@ -122,8 +132,8 @@ class Tmdb(private val http: OkHttpClient, private val io: CoroutineDispatcher, 
                 } else {
                     u.addQueryParameter("primary_release_date.gte", since)
                         .addQueryParameter("primary_release_date.lte", today)
-                        .addQueryParameter("certification_country", "US")
-                        .addQueryParameter("certification.lte", "PG-13")
+                        .addQueryParameter("certification_country", certCountry)
+                        .addQueryParameter("certification", certs.joinToString("|"))
                         .addQueryParameter("without_genres", "27")
                 }
                 val json = get(account, u) ?: break
@@ -169,10 +179,10 @@ class Tmdb(private val http: OkHttpClient, private val io: CoroutineDispatcher, 
 
     /**
      * A series fit for the family TV, by the first rating it has of the US, Australia, the UK,
-     * Canada and Germany: TV-14 / M / 12 / 14+ / 12 or lower. MA15+, TV-MA, 15, 16, 18 and
+     * Canada and Germany (then [more], e.g. India for Indian series): TV-14 / M / 12 / 14+ / 12 or lower. MA15+, TV-MA, 15, 16, 18 and
      * unrated series: false.
      */
-    suspend fun familySeries(id: Long): Boolean = withContext(io) {
+    suspend fun familySeries(id: Long, more: List<Pair<String, Set<String>>> = emptyList()): Boolean = withContext(io) {
         val ratings = rotation.run { account -> get(account, url("/3/tv/$id/content_ratings"))?.optJSONArray("results") }
             ?: return@withContext false
         val byCountry = HashMap<String, String>()
@@ -181,7 +191,7 @@ class Tmdb(private val http: OkHttpClient, private val io: CoroutineDispatcher, 
             val r = o.optString("rating").trim().uppercase()
             if (r.isNotEmpty()) byCountry[o.optString("iso_3166_1")] = r
         }
-        for ((country, family) in TV_FAMILY) {
+        for ((country, family) in TV_FAMILY + more) {
             val r = byCountry[country] ?: continue
             return@withContext r in family
         }

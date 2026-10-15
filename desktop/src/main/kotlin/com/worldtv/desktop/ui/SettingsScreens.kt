@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
@@ -122,6 +123,7 @@ private fun SettingsScreen() {
     var refresh by remember { mutableStateOf(prefs.autoRefresh) }
     var dns by remember { mutableIntStateOf(prefs.dnsMode) }
     var autoUpdate by remember { mutableStateOf(prefs.autoUpdate) }
+    var regions by remember { mutableStateOf(prefs.spotlightRegions) }
     var checkLine by remember { mutableStateOf("") }
     val checkProgress by graph.channelCheck.progress.collectAsState()
 
@@ -148,6 +150,20 @@ private fun SettingsScreen() {
                 }
                 SettingRow(Icons.Default.CheckCircle, "Channel check", checkLine.ifEmpty { "Find the live channels that work" }) { nav.push(Route.ChannelCheck) }
                 SettingRow(Icons.Default.VisibilityOff, "Hidden categories", "Hide categories you never watch") { nav.push(Route.Categories) }
+
+                SettingRow(Icons.Default.Public, "Backdrop region", com.worldtv.iptvplayer.data.spotlight.SliderRegions.label(regions)) {
+                    dialog = {
+                        RegionsDialog(regions, onDismiss = { dialog = null }) { chosen ->
+                            dialog = null
+                            if (chosen != prefs.spotlightRegions) {
+                                prefs.spotlightRegions = chosen
+                                regions = chosen
+                                graph.spotlight.regionsChanged()
+                                toaster.show("The home screen slider is being picked again for these languages")
+                            }
+                        }
+                    }
+                }
 
                 Section("Look and network")
                 SettingRow(Icons.Default.Palette, "Theme", Themes.of(themeId).label) {
@@ -276,6 +292,33 @@ private fun SettingSwitch(icon: ImageVector, title: String, on: Boolean, onChang
             ),
         )
     }
+}
+
+/** Settings > Backdrop region: tick the languages the home slider shows (none: all). */
+@Composable
+private fun RegionsDialog(current: Set<String>, onDismiss: () -> Unit, onSave: (Set<String>) -> Unit) {
+    var chosen by remember { mutableStateOf(current) }
+    val wt = LocalWt.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Backdrop region") },
+        text = {
+            Column {
+                Text("The home screen slider shows titles in these languages. None ticked: every language.", fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                com.worldtv.iptvplayer.data.spotlight.SliderRegions.ALL.forEach { r ->
+                    val on = r.id in chosen
+                    ListRow(selected = false, onClick = { chosen = if (on) chosen - r.id else chosen + r.id }, height = 44.dp) {
+                        Checkbox(on, { chosen = if (on) chosen - r.id else chosen + r.id }, colors = CheckboxDefaults.colors(checkedColor = wt.accent))
+                        Spacer(Modifier.width(8.dp))
+                        Text(r.label, fontSize = 15.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(chosen) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

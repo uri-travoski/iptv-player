@@ -181,6 +181,11 @@ class Prefs(private val file: File) {
         get() = long("spotlight_attempt_at", 0)
         set(v) = put("spotlight_attempt_at", v.toString())
 
+    /** Settings > Backdrop region: the slider's languages (SliderRegions ids); empty = all. */
+    var spotlightRegions: Set<String>
+        get() = str("spotlight_regions").orEmpty().split(',').filter { it.isNotBlank() }.toSet()
+        set(v) = put("spotlight_regions", v.joinToString(","))
+
     /** Titles taken off the slider ("movie:123", "tv:456"). */
     var spotlightHidden: Set<String>
         get() = str("spotlight_hidden").orEmpty().split(',').filter { it.isNotBlank() }.toSet()

@@ -113,6 +113,11 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
             }
             tiles += Tile("slots", R.drawable.ic_s_apps, { s(R.string.set_slots) }, { prefs.appSlotCount.toString() }) { chooseSlots() }
         }
+        if (!mobile) {
+            tiles += Tile("backdrop_region", R.drawable.ic_s_home, { s(R.string.backdrop_region_title) }, {
+                com.worldtv.iptvplayer.data.spotlight.SliderRegions.label(prefs.spotlightRegions)
+            }) { chooseBackdropRegions() }
+        }
         tiles += Tile("theme", R.drawable.ic_s_palette, { s(R.string.theme_title) }, { s(Themes.label(prefs.theme)) }) { chooseTheme() }
         tiles += Tile("layout", R.drawable.ic_s_layout, { s(R.string.set_layout) }, { s(if (mobile) R.string.set_value_mobile else R.string.set_value_tv) }) {
             prefs.uiMode = if (mobile) Prefs.UI_TV else Prefs.UI_MOBILE
@@ -368,6 +373,29 @@ class SettingsScreen(activity: MainActivity) : Screen(activity) {
     }
 
     // ---- Theme ----
+
+    /**
+     * Settings > Backdrop region (TV): the home slider's languages, several at once (e.g. English
+     * and Indian). None ticked: every language. The slider is picked again right away.
+     */
+    private fun chooseBackdropRegions() {
+        val regions = com.worldtv.iptvplayer.data.spotlight.SliderRegions.ALL
+        val checked = regions.map { it.id in prefs.spotlightRegions }.toBooleanArray()
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.backdrop_region_title)
+            .setMultiChoiceItems(regions.map { it.label }.toTypedArray(), checked) { _, which, on -> checked[which] = on }
+            .setPositiveButton(R.string.group_save) { _, _ ->
+                val chosen = regions.filterIndexed { i, _ -> checked[i] }.map { it.id }.toSet()
+                if (chosen != prefs.spotlightRegions) {
+                    prefs.spotlightRegions = chosen
+                    graph.spotlight.regionsChanged()
+                    activity.toast(activity.getString(R.string.backdrop_region_changed))
+                }
+                refresh()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
 
     private fun chooseTheme() {
         val themes = Themes.ALL

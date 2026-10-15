@@ -55,6 +55,41 @@ data class Slide(
 }
 
 /**
+ * Settings > Backdrop region: the slider shows only titles in these languages, each region judged
+ * by its own country's family certificates. None chosen: every language (US certificates).
+ */
+data class SliderRegion(
+    val id: String,
+    val label: String,
+    val languages: List<String>,
+    val country: String,
+    val movieCerts: List<String>,
+    val tvCerts: Set<String>,
+)
+
+object SliderRegions {
+    val ALL = listOf(
+        SliderRegion("en", "English", listOf("en"), "US", listOf("G", "PG", "PG-13"), setOf("TV-Y", "TV-Y7", "TV-G", "TV-PG", "TV-14")),
+        SliderRegion(
+            "in", "Indian", listOf("hi", "ta", "te", "ml", "kn", "bn", "mr", "pa", "gu", "or", "as"),
+            "IN", listOf("U", "U/A 7+", "UA", "U/A 13+"), setOf("U", "U/A 7+", "U/A 13+"),
+        ),
+        SliderRegion("fr", "French", listOf("fr"), "FR", listOf("TP", "12"), setOf("TP", "10", "12")),
+        SliderRegion("es", "Spanish", listOf("es"), "ES", listOf("A", "Ai", "7", "7i", "12"), setOf("TP", "ERI", "7", "10", "12")),
+        SliderRegion("de", "German", listOf("de"), "DE", listOf("0", "6", "12"), setOf("0", "6", "12")),
+        SliderRegion("it", "Italian", listOf("it"), "IT", listOf("T", "6+", "10+"), setOf("T", "BA", "VM12")),
+        SliderRegion("ko", "Korean", listOf("ko"), "KR", listOf("ALL", "12"), setOf("ALL", "7", "12", "Exempt")),
+        SliderRegion("ja", "Japanese", listOf("ja"), "JP", listOf("G", "PG12"), emptySet()),
+    )
+
+    /** The chosen regions, in list order (unknown ids left out). */
+    fun of(ids: Collection<String>) = ALL.filter { it.id in ids }
+
+    /** "English, Indian", or "All languages" when none is chosen. */
+    fun label(ids: Collection<String>) = of(ids).joinToString(", ") { it.label }.ifEmpty { "All languages" }
+}
+
+/**
  * Picks the slider's titles: TMDB's recent, family-rated releases that the playlist has (5 movies,
  * newest first, then 3 series), each with a text-free backdrop that [safe] passes. Pure Kotlin
  * (images come and go as bytes) so the desktop app uses it too.
@@ -71,20 +106,36 @@ class SpotlightPicker(
     private val log: (String) -> Unit = {},
 ) {
 
-    suspend fun pick(playlistId: Long, hidden: Set<String>): List<Slide> {
-        val movies = pickType(playlistId, ContentType.MOVIE, MOVIES, listOf(365, 730), hidden)
-        val series = pickType(playlistId, ContentType.SERIES, SERIES, listOf(120, 365), hidden)
+    suspend fun pick(playlistId: Long, hidden: Set<String>, regions: List<SliderRegion> = emptyList()): List<Slide> {
+        val movies = pickType(playlistId, ContentType.MOVIE, MOVIES, listOf(365, 730), hidden, regions)
+        val series = pickType(playlistId, ContentType.SERIES, SERIES, listOf(120, 365), hidden, regions)
         return movies + series
     }
 
-    private suspend fun pickType(playlistId: Long, type: ContentType, wanted: Int, windows: List<Int>, hidden: Set<String>): List<Slide> {
+    /** TMDB's recent titles: any language, or each chosen region's (most popular of each). */
+    private suspend fun releases(isSeries: Boolean, days: Int, regions: List<SliderRegion>): List<Tmdb.Release> {
+        if (regions.isEmpty()) return tmdb.recentReleases(isSeries, days, PAGES)
+        val pages = maxOf(2, PAGES / regions.size + 1)
+        return regions.flatMap { r ->
+            runCatching { tmdb.recentReleases(isSeries, days, pages, r.languages, r.country, r.movieCerts) }.getOrDefault(emptyList())
+        }.distinctBy { it.id }
+    }
+
+    private suspend fun pickType(
+        playlistId: Long,
+        type: ContentType,
+        wanted: Int,
+        windows: List<Int>,
+        hidden: Set<String>,
+        regions: List<SliderRegion>,
+    ): List<Slide> {
         val isSeries = type == ContentType.SERIES
         val out = ArrayList<Slide>()
         val tried = HashSet<Long>()
         val genres = runCatching { tmdb.genres(isSeries) }.getOrDefault(emptyMap())
         for (days in windows) {
             if (out.size >= wanted) break
-            val releases = tmdb.recentReleases(isSeries, days, PAGES)
+            val releases = releases(isSeries, days, regions)
                 .filter { it.id !in tried && Slide.key(type, it.id) !in hidden }
             val wantedTitles = releases.flatMap { r ->
                 val year = TitleMatch.year(r.date)
@@ -97,7 +148,7 @@ class SpotlightPicker(
             for ((row, r) in ordered) {
                 if (out.size >= wanted) break
                 if (!tried.add(r.id)) continue
-                if (isSeries && !runCatching { tmdb.familySeries(r.id) }.getOrDefault(false)) {
+                if (isSeries && !runCatching { tmdb.familySeries(r.id, regions.map { it.country to it.tvCerts }) }.getOrDefault(false)) {
                     log("${r.title}: not rated for the family, skipped")
                     continue
                 }

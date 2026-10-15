@@ -65,6 +65,13 @@ class DesktopSpotlight(private val graph: AppGraph) {
         refreshIfDue()
     }
 
+    /** Settings > Backdrop region changed: picked again now. */
+    fun regionsChanged() {
+        prefs.spotlightAttemptAt = 0
+        prefs.spotlightBuiltAt = 0
+        refreshIfDue()
+    }
+
     fun hide(slide: Slide) {
         prefs.spotlightHidden = prefs.spotlightHidden + slide.key
         slides.value = slides.value.filter { it.key != slide.key }
@@ -105,7 +112,7 @@ class DesktopSpotlight(private val graph: AppGraph) {
                 safe = check::safe,
                 store = { name, bytes -> File(staging, name).writeBytes(bytes) },
                 log = { android.util.Log.i(TAG, it) },
-            ).pick(playlist, prefs.spotlightHidden)
+            ).pick(playlist, prefs.spotlightHidden, com.worldtv.iptvplayer.data.spotlight.SliderRegions.of(prefs.spotlightRegions))
         } finally {
             check.close()
         }

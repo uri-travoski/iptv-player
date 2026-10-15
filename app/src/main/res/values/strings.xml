@@ -104,6 +104,8 @@
     <string name="play">Play</string>
     <string name="more_info">More info</string>
     <string name="valid_till">Valid Till: %1$s</string>
+    <string name="backdrop_region_title">Backdrop region</string>
+    <string name="backdrop_region_changed">The home screen slider is being picked again for these languages</string>
     <string name="spotlight_hide">Hide from the home screen</string>
     <string name="spotlight_hidden">Hidden from the home screen</string>
     <string name="spotlight_gone">This title is no longer in the playlist</string>

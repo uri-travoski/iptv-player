@@ -467,6 +467,11 @@ class Prefs(private val sp: SharedPreferences) {
         get() = sp.getLong("spotlight_attempt_at", 0)
         set(v) = sp.edit().putLong("spotlight_attempt_at", v).apply()
 
+    /** Settings > Backdrop region: the slider's languages (SliderRegions ids); empty = all. */
+    var spotlightRegions: Set<String>
+        get() = sp.getStringSet("spotlight_regions", emptySet())!!.toSet()
+        set(v) = sp.edit().putStringSet("spotlight_regions", v).apply()
+
     /** Titles the admin took off the slider ("movie:123", "tv:456"). */
     var spotlightHidden: Set<String>
         get() = sp.getStringSet("spotlight_hidden", emptySet())!!.toSet()

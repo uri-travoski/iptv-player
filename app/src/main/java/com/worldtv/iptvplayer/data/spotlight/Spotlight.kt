@@ -87,6 +87,13 @@ class Spotlight(
         refreshIfDue()
     }
 
+    /** Settings > Backdrop region changed: picked again now (Home keeps the old slides meanwhile). */
+    fun regionsChanged() {
+        prefs.spotlightAttemptAt = 0
+        prefs.spotlightBuiltAt = 0
+        refreshIfDue()
+    }
+
     /** Home > Menu on More info > Hide (behind the playlist PIN): gone now, and from later builds. */
     fun hide(slide: Slide) {
         prefs.spotlightHidden = prefs.spotlightHidden + slide.key
@@ -139,7 +146,7 @@ class Spotlight(
                 safe = check::safe,
                 store = { name, bytes -> saveScaled(bytes, File(staging, name), width) },
                 log = { Log.i(TAG, it) },
-            ).pick(playlist, prefs.spotlightHidden)
+            ).pick(playlist, prefs.spotlightHidden, SliderRegions.of(prefs.spotlightRegions))
         } finally {
             check.close()
         }
