@@ -33,7 +33,8 @@ import java.util.Date
 
 /**
  * Live TV: categories · channels · preview, like IBO's live screen.
- * OK on a channel plays it in the preview; OK again goes full screen.
+ * Opens with the last channel focused, nothing playing. OK on a channel plays it in the
+ * preview; OK again goes full screen.
  * Full screen: Up/Down or CH+/CH- zap, OK shows the controls, Back steps back one level
  * (controls → full screen → list), always to the same category and channel.
  * 0 (or the remote's Last / Recall key) flips back to the channel watched before, anywhere here.
@@ -315,12 +316,10 @@ class LiveScreen(activity: MainActivity) : Screen(activity) {
         val startIndex = indexOrAll(startKey)
         selectCategory(startIndex)
 
-        // Restore the last channel and play it in the preview.
+        // Focus goes back to the last channel; nothing plays until one is picked (OK).
         val lastItem = graph.prefs.lastLiveItem
         val index = if (lastItem != null) graph.repo.indexOf(p.id, ContentType.LIVE, categoryKey, lastItem, liveSort) else -1
         if (index >= 0) {
-            val row = graph.repo.page(p.id, ContentType.LIVE, categoryKey, index, 1, liveSort).firstOrNull()
-            if (row != null) play(index, row)
             focusChannel(index)
         } else {
             focusChannel(0)

@@ -165,7 +165,10 @@ class AppGraph(private val app: Application) {
     }
     val syncer: Syncer by lazy {
         // Every successful load (add, Reload, automatic refresh) checks the chosen channels again.
-        Syncer(http, db, repo, io, { adultNames() }, telemetry, onSynced = { channelCheck.request(it, fresh = true) })
+        Syncer(http, db, repo, io, { adultNames() }, telemetry, onSynced = {
+            channelCheck.request(it, fresh = true)
+            spotlight.onSynced(it)
+        })
     }
 
     /** Settings > Channel check: which live channels work, checked in the background. */
@@ -202,6 +205,11 @@ class AppGraph(private val app: Application) {
 
     /** Cast, ratings and trailers from TMDB (the user's own keys); Wikipedia covers cast without them. */
     val tmdb by lazy { Tmdb(http, io, prefs) }
+
+    /** The home screen slider (TV): recent family-safe movies and series of the playlist. */
+    val spotlight by lazy {
+        com.worldtv.iptvplayer.data.spotlight.Spotlight(app, http, tmdb, repo, prefs, telemetry, appScope) { playerInstance?.activeUrl != null }
+    }
 
     /** Cast photos for movie and series pages (Wikipedia; needs a descriptive User-Agent). */
     val castPhotos by lazy { CastPhotos(imageHttp, io) }
@@ -441,6 +449,28 @@ class Prefs(private val sp: SharedPreferences) {
     var autoRefresh: String
         get() = sp.getString("auto_refresh", null)?.takeIf { it in AutoRefresh.MODES } ?: AutoRefresh.DAILY
         set(v) = sp.edit().putString("auto_refresh", v).apply()
+
+    // ---- home screen slider (Spotlight) ----
+
+    /** The playlist the stored slides were picked from. */
+    var spotlightPlaylist: Long
+        get() = sp.getLong("spotlight_playlist", -1)
+        set(v) = sp.edit().putLong("spotlight_playlist", v).apply()
+
+    /** When the slides were last picked (ms), 0 = never. */
+    var spotlightBuiltAt: Long
+        get() = sp.getLong("spotlight_built_at", 0)
+        set(v) = sp.edit().putLong("spotlight_built_at", v).apply()
+
+    /** When picking last started (ms): a failed attempt waits an hour. */
+    var spotlightAttemptAt: Long
+        get() = sp.getLong("spotlight_attempt_at", 0)
+        set(v) = sp.edit().putLong("spotlight_attempt_at", v).apply()
+
+    /** Titles the admin took off the slider ("movie:123", "tv:456"). */
+    var spotlightHidden: Set<String>
+        get() = sp.getStringSet("spotlight_hidden", emptySet())!!.toSet()
+        set(v) = sp.edit().putStringSet("spotlight_hidden", v).apply()
 
     /** When the last full channel check of a playlist finished (ms), 0 = never. */
     fun lastChannelCheck(playlistId: Long): Long = sp.getLong("channel_check_$playlistId", 0)

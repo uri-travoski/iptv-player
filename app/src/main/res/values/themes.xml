@@ -18,6 +18,7 @@
         <item name="wtTextPrimary">@color/text_primary</item>
         <item name="wtTextSecondary">@color/text_secondary</item>
         <item name="wtScrim">@color/scrim</item>
+        <item name="wtHeroFade">@drawable/bg_hero_fade_classic</item>
     </style>
 
     <!-- Glass: frosted see-through panels with light edges over a deep blue-violet gradient. -->
@@ -37,6 +38,7 @@
         <item name="wtTextPrimary">#FFFFFFFF</item>
         <item name="wtTextSecondary">#CCDCE6F5</item>
         <item name="wtScrim">#D90B1630</item>
+        <item name="wtHeroFade">@drawable/bg_hero_fade_glass</item>
     </style>
 
     <!-- Showtime: entertainment colours, deep indigo-violet with an orange spotlight. -->
@@ -56,5 +58,6 @@
         <item name="wtTextPrimary">#FFFFFFFF</item>
         <item name="wtTextSecondary">#FFC9C0F2</item>
         <item name="wtScrim">#D9120830</item>
+        <item name="wtHeroFade">@drawable/bg_hero_fade_showtime</item>
     </style>
 </resources>

@@ -17,6 +17,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
+ * TV: the slider (5 recent movies, then 3 series, from data/spotlight) fills the screen behind
+ * Live TV · Movies · Series; More info opens the title's page, Left / Right on it change slides,
+ * Menu on it hides one (behind the playlist PIN). Slides change by themselves every 8 s.
+ * Mobile: the tiles alone.
+ *
  * Live TV · Movies · Series, with small Reload playlist and menu (⋮) icons top right; the menu
  * holds App Settings, All apps and System settings (TV: also Add app to home screen). Below, the
  * user's own apps in rows of 5, only when some are added (App Settings > Home app slots, none
@@ -31,7 +36,8 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     private val live: View = root.findViewById(R.id.tile_live)
     private val bigTiles: List<View> = listOf(live, root.findViewById(R.id.tile_movies), root.findViewById(R.id.tile_series))
     private val rows: LinearLayout = root.findViewById(R.id.home_rows)
-    private val scroll: View = root.findViewById(R.id.home_scroll)
+    /** Mobile only: the tiles and apps scroll there. */
+    private val scroll: View? = root.findViewById(R.id.home_scroll)
     private val busy: View = root.findViewById(R.id.busy)
     private val reloadStatus: TextView = root.findViewById(R.id.reload_status)
     private val reloadIcon: View = root.findViewById(R.id.home_reload)
@@ -42,6 +48,19 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
     private var slots: List<Pair<Int, View>> = emptyList()
     /** Tag of the tile that had focus when the screen was left (another app, a sub-screen). */
     private var lastFocusTag: String? = null
+    private var shown = false
+
+    // The slider (TV): declared before init, which sets it up.
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val heroViews: Array<ImageView> by lazy { arrayOf(root.findViewById(R.id.hero_back), root.findViewById(R.id.hero_front)) }
+    private val heroMore: TextView by lazy { root.findViewById(R.id.hero_more) }
+    private val heroDots: LinearLayout by lazy { root.findViewById(R.id.hero_dots) }
+    private var slides: List<com.worldtv.iptvplayer.data.spotlight.Slide> = emptyList()
+    private var slideIndex = 0
+    /** Which of [heroViews] shows the current backdrop. */
+    private var heroShowing = 0
+    private var heroJob: kotlinx.coroutines.Job? = null
+    private val advance = Runnable { if (shown && !heroMore.isFocused) showSlide(slideIndex + 1) }
 
     init {
         live.tag = "live"
@@ -57,8 +76,11 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         menuIcon.setOnClickListener { showMenu() }
         // Up from the big tiles reaches the icons top right.
         bigTiles.forEach { it.nextFocusUpId = reloadIcon.id }
-        val version = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName
-        root.findViewById<TextView>(R.id.version).text = activity.getString(R.string.version_label, version)
+        root.findViewById<TextView>(R.id.version)?.let {
+            val version = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName
+            it.text = activity.getString(R.string.version_label, version)
+        }
+        if (!mobile) setUpSlider()
     }
 
     override fun onShown() {
@@ -71,15 +93,19 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         scope.launch { autoRefresh() }
         graph.channelCheck.requestDue() // overdue after the box was off; runs only when idle
         shown = true
+        if (!mobile) {
+            graph.spotlight.refreshIfDue()
+            scheduleAdvance()
+        }
         // Update check: once per start, in the background, offered only on the home screen.
         AppUpdates.offerPending(activity, scope)
         AppUpdates.checkOnStart(activity, activity.lifecycleScope) { if (shown) AppUpdates.offerPending(activity, scope) }
     }
 
-    private var shown = false
 
     override fun onHidden() {
         shown = false
+        handler.removeCallbacks(advance)
         val focused = activity.currentFocus
         if (focused != null && focused.tag is String && isInside(focused)) lastFocusTag = focused.tag as String
     }
@@ -137,6 +163,7 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
      * even that doesn't fit (small screens with many apps) does the area scroll.
      */
     private fun fitBigTiles(rowCount: Int) {
+        val scroll = scroll ?: return // TV: fixed tiles under the slider
         scroll.post {
             val rowsHeight = if (rowCount == 0) 0 else rowCount * dp(CELL_HEIGHT) + (rowCount - 1) * dp(ROW_GAP) + dp(24 + 16)
             val target = (scroll.height - rowsHeight).coerceIn(dp(170), dp(if (rowCount == 0) 300 else 250))
@@ -268,12 +295,14 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         }
     }
 
+    /** "Valid Till: 10-Aug-2027" for an Xtream account; nothing for playlists without an end. */
     private suspend fun showAccount() {
-        val p = graph.repo.playlist(graph.prefs.activePlaylist) ?: return
-        val parts = arrayListOf(p.name)
-        p.expires?.let { parts += "Expires " + Dates.day(it * 1000) }
-        if (p.maxConnections > 0) parts += "${p.maxConnections} connection" + if (p.maxConnections > 1) "s" else ""
-        account.text = parts.joinToString("  ·  ")
+        val p = graph.repo.playlist(graph.prefs.activePlaylist)
+        val expires = p?.expires?.takeIf { it > 0 }
+        account.text = expires?.let {
+            activity.getString(R.string.valid_till, java.text.SimpleDateFormat("dd-MMM-yyyy", java.util.Locale.ENGLISH).format(java.util.Date(it * 1000)))
+        }.orEmpty()
+        account.visibility = if (expires == null) View.GONE else View.VISIBLE
     }
 
     /**
@@ -332,7 +361,160 @@ class HomeScreen(activity: MainActivity) : Screen(activity) {
         }
     }
 
+    // ---- the slider (TV) ----
+
+
+    private fun setUpSlider() {
+        val logo = root.findViewById<TextView>(R.id.home_logo)
+        logo.text = android.text.SpannableString("WorldTV").apply {
+            setSpan(android.text.style.ForegroundColorSpan(activity.themeColor(R.attr.wtPressed)), 5, 7, 0)
+        }
+        bigTiles.forEach { tile ->
+            val t = tile as TextView
+            t.compoundDrawablesRelative[0]?.let { icon ->
+                icon.setBounds(0, 0, dp(34), dp(34))
+                t.setCompoundDrawablesRelative(icon, null, null, null)
+            }
+            // Icon and name together in the middle (a TextView puts its icon at the edge).
+            t.addOnLayoutChangeListener { v, l, _, r, _, _, _, _, _ ->
+                val tv = v as TextView
+                val content = dp(34) + tv.compoundDrawablePadding + tv.paint.measureText(tv.text.toString()).toInt()
+                val side = ((r - l - content) / 2).coerceAtLeast(dp(12))
+                if (tv.paddingStart != side) tv.post { tv.setPaddingRelative(side, tv.paddingTop, side, tv.paddingBottom) }
+            }
+            t.setOnFocusChangeListener { v, focused ->
+                v.animate().scaleX(if (focused) 1.04f else 1f).scaleY(if (focused) 1.04f else 1f).setDuration(150).start()
+            }
+        }
+        heroMore.tag = "more"
+        heroMore.setOnClickListener { openSlide() }
+        heroMore.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> { showSlide(slideIndex - 1); true }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> { showSlide(slideIndex + 1); true }
+                KeyEvent.KEYCODE_MENU -> { hideSlide(); true }
+                else -> false
+            }
+        }
+        heroMore.setOnLongClickListener { hideSlide(); true }
+        heroMore.setOnFocusChangeListener { _, focused -> if (!focused) scheduleAdvance() }
+        heroMore.nextFocusDownId = live.id
+        heroMore.nextFocusUpId = reloadIcon.id
+        scope.launch { graph.spotlight.slides.collect { showSlides(it) } }
+    }
+
+    private fun showSlides(list: List<com.worldtv.iptvplayer.data.spotlight.Slide>) {
+        val current = slides.getOrNull(slideIndex)?.key
+        slides = list
+        val on = list.isNotEmpty()
+        listOf(R.id.hero_info, R.id.hero_dots, R.id.hero_shade_left, R.id.hero_fade).forEach {
+            root.findViewById<View>(it).visibility = if (on) View.VISIBLE else View.GONE
+        }
+        root.findViewById<View>(R.id.home_bottom_space).visibility = if (on) View.GONE else View.VISIBLE
+        bigTiles.forEach { it.nextFocusUpId = if (on) heroMore.id else reloadIcon.id }
+        if (!on) {
+            heroViews.forEach { it.animate().cancel(); it.alpha = 0f; it.setImageDrawable(null) }
+            if (heroMore.isFocused) live.requestFocus()
+            return
+        }
+        heroDots.removeAllViews()
+        for (i in list.indices) {
+            val dot = View(activity)
+            val lp = LinearLayout.LayoutParams(dp(6), dp(6))
+            // A small gap between the movies and the series.
+            if (i > 0) lp.marginStart = dp(if (list[i].type != list[i - 1].type) 14 else 7)
+            heroDots.addView(dot, lp)
+        }
+        showSlide(list.indexOfFirst { it.key == current }.coerceAtLeast(0), animate = false)
+    }
+
+    private fun showSlide(index: Int, animate: Boolean = true) {
+        if (slides.isEmpty()) return
+        slideIndex = ((index % slides.size) + slides.size) % slides.size
+        val slide = slides[slideIndex]
+        root.findViewById<TextView>(R.id.hero_title).text = slide.title
+        root.findViewById<TextView>(R.id.hero_meta).text = listOfNotNull(slide.year, slide.genre, slide.rating?.let { "★ $it" }).joinToString("  ·  ")
+        root.findViewById<TextView>(R.id.hero_plot).text = slide.overview
+        for (i in 0 until heroDots.childCount) {
+            val dot = heroDots.getChildAt(i)
+            dot.layoutParams = dot.layoutParams.apply { width = dp(if (i == slideIndex) 22 else 6) }
+            dot.background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(3).toFloat()
+                setColor(if (i == slideIndex) 0xE6FFFFFF.toInt() else 0x4DFFFFFF)
+            }
+        }
+        val file = graph.spotlight.imageFile(slide)
+        val width = activity.resources.displayMetrics.widthPixels
+        heroJob?.cancel()
+        heroJob = scope.launch {
+            val bitmap = withContext(graph.io) { decodeBackdrop(file, width) } ?: return@launch
+            val next = 1 - heroShowing
+            val incoming = heroViews[next]
+            val outgoing = heroViews[heroShowing]
+            incoming.setImageBitmap(bitmap)
+            heroShowing = next
+            if (animate && outgoing.alpha > 0f) {
+                incoming.animate().alpha(1f).setDuration(FADE_MS).withLayer().start()
+                outgoing.animate().alpha(0f).setDuration(FADE_MS).withLayer().withEndAction { outgoing.setImageDrawable(null) }.start()
+            } else {
+                incoming.alpha = 1f
+                outgoing.alpha = 0f
+                outgoing.setImageDrawable(null)
+            }
+        }
+        scheduleAdvance()
+    }
+
+    /** The stored backdrop at the screen's width, 16 bits a pixel (half the memory, no visible loss on video-like images). */
+    private fun decodeBackdrop(file: java.io.File, width: Int): android.graphics.Bitmap? {
+        if (!file.exists()) return null
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(file.path, bounds)
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= width) sample *= 2
+        return android.graphics.BitmapFactory.decodeFile(file.path, android.graphics.BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+        })
+    }
+
+    private fun scheduleAdvance() {
+        handler.removeCallbacks(advance)
+        if (!mobile && shown && slides.size > 1) handler.postDelayed(advance, SLIDE_MS)
+    }
+
+    /** More info: the title's page (play from there). */
+    private fun openSlide() {
+        val slide = slides.getOrNull(slideIndex) ?: return
+        scope.launch {
+            val p = graph.repo.playlist(graph.prefs.activePlaylist) ?: return@launch
+            val row = graph.repo.entryRow(p.id, slide.type, slide.itemId)
+                ?: return@launch activity.toast(activity.getString(R.string.spotlight_gone))
+            activity.push(VodDetailScreen(activity, p, slide.type, row) {})
+        }
+    }
+
+    /** Menu on More info: takes the title off the slider for good (the admin's PIN first). */
+    private fun hideSlide() {
+        val slide = slides.getOrNull(slideIndex) ?: return
+        scope.launch {
+            val p = graph.repo.playlist(graph.prefs.activePlaylist) ?: return@launch
+            AlertDialog.Builder(activity)
+                .setTitle(slide.title)
+                .setItems(arrayOf(activity.getString(R.string.spotlight_hide))) { _, _ ->
+                    PinPrompt.require(activity, p) {
+                        graph.spotlight.hide(slide)
+                        activity.toast(activity.getString(R.string.spotlight_hidden))
+                    }
+                }
+                .show()
+        }
+    }
+
     private companion object {
+        const val SLIDE_MS = 8_000L
+        const val FADE_MS = 700L
         const val COLUMNS = 5
         const val CELL_HEIGHT = 80
         const val ROW_GAP = 12

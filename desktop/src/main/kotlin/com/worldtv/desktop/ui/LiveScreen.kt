@@ -181,14 +181,11 @@ fun LiveScreen() {
         cursor = playingHere.coerceAtLeast(0)
         if (!restored) {
             restored = true
-            // Back to the channel watched last time, playing in the preview.
+            // The cursor goes back to the channel watched last time; nothing plays until one is picked.
             val last = prefs.lastLiveItem
             if (last != null && !Repository.isSearch(key)) {
                 val i = graph.repo.indexOf(p.id, ContentType.LIVE, key, last, prefs.liveSort)
-                if (i >= 0) {
-                    cursor = i
-                    r.fetch(i)?.let { row -> picked = Picked(row, key, i, r) }
-                }
+                if (i >= 0) cursor = i
             }
         }
         listState.scrollToItem((cursor - 5).coerceAtLeast(0))

@@ -167,6 +167,25 @@ class Prefs(private val file: File) {
         get() = str("channel_check_pending").orEmpty().split(',').mapNotNull { it.trim().toLongOrNull() }.toSet()
         set(v) = put("channel_check_pending", v.joinToString(","))
 
+    // ---- home screen slider ----
+
+    var spotlightPlaylist: Long
+        get() = long("spotlight_playlist", -1)
+        set(v) = put("spotlight_playlist", v.toString())
+
+    var spotlightBuiltAt: Long
+        get() = long("spotlight_built_at", 0)
+        set(v) = put("spotlight_built_at", v.toString())
+
+    var spotlightAttemptAt: Long
+        get() = long("spotlight_attempt_at", 0)
+        set(v) = put("spotlight_attempt_at", v.toString())
+
+    /** Titles taken off the slider ("movie:123", "tv:456"). */
+    var spotlightHidden: Set<String>
+        get() = str("spotlight_hidden").orEmpty().split(',').filter { it.isNotBlank() }.toSet()
+        set(v) = put("spotlight_hidden", v.joinToString(","))
+
     // ---- window ----
 
     var windowBounds: String?

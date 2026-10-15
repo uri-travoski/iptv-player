@@ -36,6 +36,8 @@ data class WtColors(
     val textPrimary: Color,
     val textSecondary: Color,
     val scrim: Color,
+    /** Home slider: the backdrop fades into this behind the tiles. */
+    val heroFade: Color = Color(0xFF2A0A12),
     val good: Color = Color(0xFF4CD964),
     val error: Color = Color(0xFFFF8A80),
 )
@@ -89,6 +91,7 @@ object Themes {
         textPrimary = Color(0xFFFFFFFF),
         textSecondary = Color(0xCCDCE6F5),
         scrim = Color(0xD90B1630),
+        heroFade = Color(0xFF0E1A3A),
     )
 
     val showtime = WtColors(
@@ -106,6 +109,7 @@ object Themes {
         textPrimary = Color(0xFFFFFFFF),
         textSecondary = Color(0xFFC9C0F2),
         scrim = Color(0xD9120830),
+        heroFade = Color(0xFF150B3C),
     )
 
     val ALL = listOf(classic, glass, showtime)

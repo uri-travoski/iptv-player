@@ -32,6 +32,7 @@ val sharedSources = tasks.register<Sync>("sharedSources") {
             "com/worldtv/iptvplayer/data/update/**",
             "com/worldtv/iptvplayer/data/check/TsStats.kt",
             "com/worldtv/iptvplayer/data/check/ChannelProbe.kt",
+            "com/worldtv/iptvplayer/data/spotlight/SpotlightPicker.kt",
             "com/worldtv/iptvplayer/data/net/AppDns.kt",
             "com/worldtv/iptvplayer/AutoRefresh.kt",
         )
@@ -86,6 +87,7 @@ dependencies {
     implementation(libs.org.json)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    implementation(libs.onnxruntime)
     testImplementation(libs.junit)
 }
 

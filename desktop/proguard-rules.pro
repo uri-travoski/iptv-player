@@ -13,5 +13,6 @@
 -keep class kotlinx.coroutines.** { *; }
 -keep class org.jetbrains.skia.** { *; }
 -keep class org.jetbrains.skiko.** { *; }
+-keep class ai.onnxruntime.** { *; }
 -dontwarn **
 -dontnote **

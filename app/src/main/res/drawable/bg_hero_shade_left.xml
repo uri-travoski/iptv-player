@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home slider: darkens the left of the backdrop so the title and plot read well. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="0" android:centerX="0.35" android:startColor="#E00C0306" android:centerColor="#700C0306" android:endColor="#000C0306" />
+</shape>

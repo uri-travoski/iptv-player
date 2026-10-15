@@ -774,6 +774,31 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             rows.sortedByDescending { year[it.itemId] ?: 0 }
         }
 
+    /**
+     * Each wanted title in [index] (e.g. TMDB's recent releases) that is in the library, with the
+     * library entry it matched: the first (provider order) of each, so a title listed several times
+     * comes back once. Hidden and adult entries are left out. One scan of the names.
+     */
+    suspend fun <T> matchEach(playlistId: Long, type: ContentType, index: TitleMatch.Index<T>): List<Pair<EntryRow, T>> =
+        withContext(io) {
+            if (index.isEmpty) return@withContext emptyList()
+            val (where, args) = filter(playlistId, type, KEY_ALL)
+            val found = LinkedHashMap<T, String>()
+            db.readableDatabase.rawQuery("SELECT e.item_id, e.name, e.year FROM entry e $where ORDER BY e.sort", args).use { c ->
+                while (c.moveToNext()) {
+                    val tag = index.match(c.getString(1), c.getStringOrNull(2)) ?: continue
+                    if (tag !in found) found[tag] = c.getString(0)
+                }
+            }
+            val rows = rowsById(playlistId, type, found.values.toList()).associateBy { it.itemId }
+            found.mapNotNull { (tag, id) -> rows[id]?.let { it to tag } }
+        }
+
+    /** One entry as lists show it, or null when it is gone from the playlist. */
+    suspend fun entryRow(playlistId: Long, type: ContentType, itemId: String): EntryRow? = withContext(io) {
+        rowsById(playlistId, type, listOf(itemId)).firstOrNull()
+    }
+
     /** Movies or series of [type] whose stored cast names [actor] (the provider's lists; no TMDB). */
     suspend fun byCast(playlistId: Long, type: ContentType, actor: String): List<EntryRow> = withContext(io) {
         val (where, args) = filter(playlistId, type, KEY_ALL)

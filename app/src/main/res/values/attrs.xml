@@ -13,4 +13,6 @@
     <attr name="wtTextPrimary" format="color" />
     <attr name="wtTextSecondary" format="color" />
     <attr name="wtScrim" format="color" />
+    <!-- Home slider (TV): the backdrop fades into this, behind the tiles. -->
+    <attr name="wtHeroFade" format="reference" />
 </resources>

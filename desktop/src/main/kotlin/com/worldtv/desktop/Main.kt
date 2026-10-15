@@ -50,6 +50,11 @@ import java.awt.image.BufferedImage
 lateinit var graph: AppGraph
     private set
 
+/** Window full screen (F11, the players). */
+private val fullscreen = mutableStateOf(false)
+private var normalBounds: java.awt.Rectangle? = null
+private var normalState = java.awt.Frame.NORMAL
+
 /** Theme chosen in Settings; the whole window follows it. */
 var themeId by mutableStateOf("classic")
 
@@ -71,7 +76,7 @@ fun main() {
         val nav = remember { Navigator() }
         Window(
             onCloseRequest = {
-                if (state.placement == WindowPlacement.Floating) {
+                if (!fullscreen.value && state.placement == WindowPlacement.Floating) {
                     graph.prefs.windowBounds = listOf(state.position.x.value, state.position.y.value, state.size.width.value, state.size.height.value)
                         .joinToString(",") { it.toInt().toString() }
                 }
@@ -85,11 +90,11 @@ fun main() {
                 if (e.type != KeyEventType.KeyDown) return@Window false
                 when (e.key) {
                     Key.Escape -> {
-                        if (!nav.onBack() && state.placement == WindowPlacement.Fullscreen) state.placement = WindowPlacement.Floating
+                        if (!nav.onBack() && fullscreen.value) fullscreen.value = false
                         true
                     }
                     Key.F11 -> {
-                        state.placement = if (state.placement == WindowPlacement.Fullscreen) WindowPlacement.Floating else WindowPlacement.Fullscreen
+                        fullscreen.value = !fullscreen.value
                         true
                     }
                     else -> false
@@ -101,13 +106,41 @@ fun main() {
             val controls = remember {
                 object : WindowControls {
                     private val blank: Cursor = Toolkit.getDefaultToolkit().createCustomCursor(BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB), Point(0, 0), "none")
-                    override val isFullscreen get() = state.placement == WindowPlacement.Fullscreen
+                    override val isFullscreen get() = fullscreen.value
                     override fun setFullscreen(on: Boolean) {
-                        state.placement = if (on) WindowPlacement.Fullscreen else WindowPlacement.Floating
+                        fullscreen.value = on
                     }
                     override fun setCursorHidden(hidden: Boolean) {
                         awtWindow.cursor = if (hidden) blank else Cursor.getDefaultCursor()
                     }
+                }
+            }
+            // Full screen by hand (Compose's own leaves some window managers, e.g. Cinnamon,
+            // without the title bar afterwards): the window's place and size are kept before and
+            // put back after, with the title bar on the screen.
+            LaunchedEffect(fullscreen.value) {
+                val device = awtWindow.graphicsConfiguration.device
+                if (fullscreen.value) {
+                    if (device.fullScreenWindow !== awtWindow) {
+                        normalBounds = awtWindow.bounds
+                        normalState = awtWindow.extendedState
+                        device.fullScreenWindow = awtWindow
+                    }
+                } else if (device.fullScreenWindow === awtWindow) {
+                    device.fullScreenWindow = null
+                    val b = normalBounds
+                    if (b != null) {
+                        val screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+                        awtWindow.setBounds(
+                            b.x.coerceIn(screen.x, maxOf(screen.x, screen.x + screen.width - 200)),
+                            b.y.coerceIn(screen.y, maxOf(screen.y, screen.y + screen.height - 200)),
+                            minOf(b.width, screen.width),
+                            minOf(b.height, screen.height),
+                        )
+                    }
+                    awtWindow.extendedState = normalState
+                    awtWindow.toFront()
+                    awtWindow.requestFocus()
                 }
             }
             val scope = rememberCoroutineScope()

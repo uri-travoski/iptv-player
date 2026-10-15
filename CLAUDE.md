@@ -11,7 +11,9 @@ MVP document: https://claude.ai/code/artifact/f7b3b895-aef4-4a3d-9555-9848fd1bd0
   (touch, portrait) layout chosen on first start next to TV, switchable in App Settings (`Prefs.uiMode`;
   `*_mobile.xml` layouts, picked in each screen), with landscape full screen on phones; per-playlist
   hidden categories set by an admin behind the playlist PIN (App Settings > playlist > Categories),
-  left out of every list including All, Favourites and search.
+  left out of every list including All, Favourites and search; the TV home screen slider (data/spotlight):
+  5 recent movies then 3 recent series of the playlist from TMDB, family-rated only (movies ≤ PG-13, series ≤ TV-14/M,
+  no horror), every backdrop passed by the on-device image check, with Menu > Hide behind the playlist PIN.
 - **Not built:** cloud/website playlist management, activation/licensing, parental PIN on watching,
   recent-channels list, multi-screen, recording, Stalker portals, PiP, USB playlist files, number-key zap.
 - No built-in content, playlists or provider links, ever.
@@ -19,8 +21,10 @@ MVP document: https://claude.ai/code/artifact/f7b3b895-aef4-4a3d-9555-9848fd1bd0
 ## Hard limits
 - **Release APK < 15 MB** (CI fails at 15 MB; expect 5–8 MB). Check size impact before adding any dependency.
 - **Native code:** only the Jellyfin `media3-ffmpeg-decoder` (audio-only FFmpeg, GPL-3.0), used as a fallback
-  for audio the box can't decode (AC-3/E-AC-3/MP2/DTS). ARM ABIs only. No other native code (no libVLC,
-  no video FFmpeg). Anything still unplayable goes to an external player ("Open in…"), as IBO does.
+  for audio the box can't decode (AC-3/E-AC-3/MP2/DTS), and TensorFlow Lite for the slider's image check (owner's
+  choice; its model is in models/, downloaded once). ARM ABIs only (`-PwithX86` adds x86_64 for emulator tests),
+  compressed in the APK. No other native code (no libVLC, no video FFmpeg). Anything still unplayable goes to an
+  external player ("Open in…"), as IBO does.
 - **License:** GPL-3.0 (required by the FFmpeg decoder). Keep LICENSE and the README section, and keep
   the source public. No licence text in the app UI (owner's choice).
 - minSdk 24, targetSdk 36. English only (`resourceConfigurations = en`) until translations exist.
@@ -47,7 +51,11 @@ MVP document: https://claude.ai/code/artifact/f7b3b895-aef4-4a3d-9555-9848fd1bd0
   with Android's per-thread transactions, ContentValues, Log). A shared file that starts using another Android API
   breaks the desktop build: add a stand-in or keep the API out of shared code.
 - `Prefs` and `Telemetry` (no telemetry on desktop) have desktop versions in `desktop/src/main/kotlin/com/worldtv/iptvplayer/`.
-- Test it on a virtual display (Xvfb) against a local mock panel, never against real providers.
+- Test it on a virtual display (Xvfb, with openbox for window decorations) against a local mock panel, never
+  against real providers. `WORLDTV_MODEL_URL` points the slider's model download at a local copy.
+- Home slider: the shared `SpotlightPicker` with the ONNX copy of the image check (ONNX Runtime); same rules as TV.
+- Full screen is done by hand in Main.kt (AWT full-screen window, bounds restored): Compose's own placement left
+  Cinnamon without the title bar afterwards.
 - Packages: `desktop/packaging/linux/build-{deb,rpm,appimage,flatpak}.sh`. `.github/workflows/linux.yml` runs them
   on GitHub when a release is **published** (the "bump n push" release), and attaches them to it. No build on push.
   `-PdesktopOnly` leaves the Android module out (that job has no Android SDK set up).

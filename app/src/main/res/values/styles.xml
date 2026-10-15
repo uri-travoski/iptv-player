@@ -100,6 +100,19 @@
     </style>
 
     <!-- Home menu tile, Mobile layout: full width, icon left of the label. -->
+    <!-- Home tiles under the slider (TV): icon beside the name, see-through until focused. -->
+    <style name="HomeTileWide" parent="TileButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">96dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/bg_home_tile_wide</item>
+        <item name="android:drawablePadding">16dp</item>
+        <item name="android:drawableTint">#FFFFFFFF</item>
+        <item name="android:textColor">#FFFFFFFF</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
     <style name="HomeTileMobile" parent="TileButton">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">104dp</item>

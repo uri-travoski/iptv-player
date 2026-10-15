@@ -82,6 +82,129 @@ class Tmdb(private val http: OkHttpClient, private val io: CoroutineDispatcher, 
         result
     }
 
+    // ---- the home screen slider (data/spotlight) ----
+
+    /** A movie or series TMDB lists as recently released. [date]: "2026-05-01" (first air date for series). */
+    data class Release(
+        val id: Long,
+        val series: Boolean,
+        val title: String,
+        val originalTitle: String?,
+        val date: String,
+        val overview: String,
+        val genreIds: List<Int>,
+        val rating: Double,
+        val popularity: Double,
+    )
+
+    /**
+     * Recent, family-safe releases, most popular first ([pages] of 20). Movies: released in the
+     * last [days], US certificate PG-13 or lower (TMDB lists only films that have one), no horror.
+     * Series: an episode aired in the last [days]; no news, reality or talk shows. The series'
+     * own rating is checked separately ([familySeries]).
+     */
+    suspend fun recentReleases(series: Boolean, days: Int, pages: Int): List<Release> = withContext(io) {
+        val f = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val today = f.format(java.util.Date())
+        val since = f.format(java.util.Date(System.currentTimeMillis() - days * 86_400_000L))
+        val out = ArrayList<Release>()
+        rotation.run { account ->
+            out.clear()
+            for (page in 1..pages) {
+                val u = url(if (series) "/3/discover/tv" else "/3/discover/movie")
+                    .addQueryParameter("include_adult", "false")
+                    .addQueryParameter("sort_by", "popularity.desc")
+                    .addQueryParameter("page", page.toString())
+                if (series) {
+                    u.addQueryParameter("air_date.gte", since)
+                        .addQueryParameter("air_date.lte", today)
+                        .addQueryParameter("without_genres", "10763,10764,10767")
+                } else {
+                    u.addQueryParameter("primary_release_date.gte", since)
+                        .addQueryParameter("primary_release_date.lte", today)
+                        .addQueryParameter("certification_country", "US")
+                        .addQueryParameter("certification.lte", "PG-13")
+                        .addQueryParameter("without_genres", "27")
+                }
+                val json = get(account, u) ?: break
+                val results = json.optJSONArray("results") ?: break
+                for (i in 0 until results.length()) {
+                    val o = results.optJSONObject(i) ?: continue
+                    if (o.optBoolean("adult")) continue
+                    val title = o.optString(if (series) "name" else "title").ifEmpty { continue }
+                    val original = o.optString(if (series) "original_name" else "original_title").takeIf { it.isNotEmpty() && it != title }
+                    val genres = o.optJSONArray("genre_ids")?.let { a -> (0 until a.length()).map { a.optInt(it) } }.orEmpty()
+                    out += Release(
+                        id = o.optLong("id"),
+                        series = series,
+                        title = title,
+                        originalTitle = original,
+                        date = o.optString(if (series) "first_air_date" else "release_date"),
+                        overview = o.optString("overview"),
+                        genreIds = genres,
+                        rating = o.optDouble("vote_average", 0.0),
+                        popularity = o.optDouble("popularity", 0.0),
+                    )
+                }
+                if (page >= json.optInt("total_pages", 1)) break
+            }
+        }
+        out
+    }
+
+    private val genreNames = HashMap<Boolean, Map<Int, String>>()
+
+    /** TMDB's genre names (English), by id. */
+    suspend fun genres(series: Boolean): Map<Int, String> = withContext(io) {
+        synchronized(genreNames) { genreNames[series]?.let { return@withContext it } }
+        val map = rotation.run { account ->
+            val a = get(account, url(if (series) "/3/genre/tv/list" else "/3/genre/movie/list"))?.optJSONArray("genres")
+            val m = HashMap<Int, String>()
+            if (a != null) for (i in 0 until a.length()) a.optJSONObject(i)?.let { m[it.optInt("id")] = it.optString("name") }
+            m
+        }
+        synchronized(genreNames) { genreNames[series] = map }
+        map
+    }
+
+    /**
+     * A series fit for the family TV, by the first rating it has of the US, Australia, the UK,
+     * Canada and Germany: TV-14 / M / 12 / 14+ / 12 or lower. MA15+, TV-MA, 15, 16, 18 and
+     * unrated series: false.
+     */
+    suspend fun familySeries(id: Long): Boolean = withContext(io) {
+        val ratings = rotation.run { account -> get(account, url("/3/tv/$id/content_ratings"))?.optJSONArray("results") }
+            ?: return@withContext false
+        val byCountry = HashMap<String, String>()
+        for (i in 0 until ratings.length()) {
+            val o = ratings.optJSONObject(i) ?: continue
+            val r = o.optString("rating").trim().uppercase()
+            if (r.isNotEmpty()) byCountry[o.optString("iso_3166_1")] = r
+        }
+        for ((country, family) in TV_FAMILY) {
+            val r = byCountry[country] ?: continue
+            return@withContext r in family
+        }
+        false
+    }
+
+    /**
+     * Wide backdrop images of a title without text on them (TMDB's "no language" ones), best
+     * voted first; image paths for [imageUrl]. Wide enough for a TV (1280+ px).
+     */
+    suspend fun backdrops(series: Boolean, id: Long): List<String> = withContext(io) {
+        val list = rotation.run { account ->
+            get(account, url("/3/${if (series) "tv" else "movie"}/$id/images").addQueryParameter("include_image_language", "null"))
+                ?.optJSONArray("backdrops")
+        } ?: return@withContext emptyList()
+        (0 until list.length()).mapNotNull { list.optJSONObject(it) }
+            .filter { it.optInt("width") >= 1280 && it.optString("file_path").startsWith("/") }
+            .sortedWith(compareByDescending<JSONObject> { it.optDouble("vote_average") }.thenByDescending { it.optInt("vote_count") })
+            .map { it.optString("file_path") }
+    }
+
+    fun imageUrl(path: String, size: String = "w1280") = "$IMAGES/$size$path"
+
     /** Settings > Online accounts > Test. */
     suspend fun test(account: OnlineAccount): String = withContext(io) {
         try {
@@ -160,5 +283,13 @@ class Tmdb(private val http: OkHttpClient, private val io: CoroutineDispatcher, 
     private companion object {
         const val API = "https://api.themoviedb.org"
         const val IMAGES = "https://image.tmdb.org/t/p"
+        /** Ratings fit for the family TV, by country, in the order they are looked at. */
+        val TV_FAMILY = listOf(
+            "US" to setOf("TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG", "TV-14"),
+            "AU" to setOf("G", "PG", "M", "P", "C"),
+            "GB" to setOf("U", "PG", "12", "12A"),
+            "CA" to setOf("C", "C8", "G", "PG", "14+"),
+            "DE" to setOf("0", "6", "12"),
+        )
     }
 }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home slider: the backdrop fades into the theme's background behind the tiles. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="270" android:centerY="0.45" android:startColor="#000E1A3A" android:centerColor="#A60E1A3A" android:endColor="#FF0E1A3A" />
+</shape>

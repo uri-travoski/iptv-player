@@ -77,7 +77,10 @@ class AppGraph {
 
     val repo = Repository(db, io)
 
-    val syncer = Syncer(http, db, repo, io, { adultNames() }, null, onSynced = { channelCheck.request(it, fresh = true) })
+    val syncer = Syncer(http, db, repo, io, { adultNames() }, null, onSynced = {
+        channelCheck.request(it, fresh = true)
+        spotlight.onSynced(it)
+    })
 
     val player = VlcPlayer().also {
         it.initVolume(prefs.volume, prefs.muted)
@@ -88,6 +91,9 @@ class AppGraph {
     val tmdb = Tmdb(http, io, prefs)
 
     val castPhotos = CastPhotos(imageHttp, io)
+
+    /** The home screen slider: recent family-safe movies and series of the playlist. */
+    val spotlight by lazy { com.worldtv.desktop.spotlight.DesktopSpotlight(this) }
 
     /** True while a playlist is being downloaded. */
     val syncing = MutableStateFlow(false)

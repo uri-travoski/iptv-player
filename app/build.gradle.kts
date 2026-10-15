@@ -13,12 +13,24 @@ android {
         applicationId = "com.worldtv.iptvplayer"
         minSdk = 24
         targetSdk = 36
-        versionCode = 56
-        versionName = "2.39"
+        versionCode = 57
+        versionName = "2.40"
         // English only for now; keeps unused library translations out of the APK.
         resourceConfigurations += listOf("en")
         // TV boxes are ARM. Keeps the FFmpeg audio decoder to two ~1.4 MB native libraries.
-        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
+        // The home slider's image check model (models/ in this repository). -PmodelUrl=… points a
+        // test build at a local copy.
+        resValue(
+            "string",
+            "spotlight_model_url",
+            (project.findProperty("modelUrl") as String?)
+                ?: "https://raw.githubusercontent.com/uri-travoski/iptv-player/main/models/nsfw-mobilenet-v2-int8.tflite",
+        )
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            // -PwithX86: also x86_64, for tests on the emulator (never for release APKs).
+            if (project.hasProperty("withX86")) abiFilters += "x86_64"
+        }
     }
 
     signingConfigs {
@@ -50,6 +62,9 @@ android {
     }
 
     packaging {
+        // Native libraries compressed in the APK (FFmpeg audio, TensorFlow Lite): ~4 MB smaller
+        // download; Android unpacks them once at install.
+        jniLibs { useLegacyPackaging = true }
         resources {
             excludes += setOf(
                 "/META-INF/{AL2.0,LGPL2.1}",
@@ -84,6 +99,7 @@ dependencies {
     implementation(libs.coil)
     implementation(libs.coil.network.okhttp)
     implementation(libs.profileinstaller)
+    implementation(libs.tflite)
 
     testImplementation(libs.junit)
 }

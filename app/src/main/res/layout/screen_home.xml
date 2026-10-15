@@ -1,151 +1,264 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  Home (TV): the slider's backdrop fills the screen (two images, cross-faded), shaded on the left
+  and fading into the theme's background at the bottom. Over it: WorldTV, Valid Till and the
+  round Reload / menu buttons on top; the title, two lines of its plot and More info; the slide
+  dots; then Live TV · Movies · Series, and the user's apps when there are some.
+  With no slides (none picked yet, or no movies in the playlist) the tiles sit in the middle.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:paddingStart="48dp"
-    android:paddingTop="36dp"
-    android:paddingEnd="48dp">
+    android:layout_height="match_parent">
 
-    <!-- Title and account on the left; small Reload and menu (⋮) icons top right. -->
+    <ImageView
+        android:id="@+id/hero_back"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop" />
+
+    <ImageView
+        android:id="@+id/hero_front"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop" />
+
+    <View
+        android:id="@+id/hero_shade_left"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_hero_shade_left"
+        android:visibility="gone" />
+
+    <View
+        android:id="@+id/hero_fade"
+        android:layout_width="match_parent"
+        android:layout_height="460dp"
+        android:layout_gravity="bottom"
+        android:background="?attr/wtHeroFade"
+        android:visibility="gone" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="110dp"
+        android:background="@drawable/bg_hero_shade_top" />
+
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="vertical"
+        android:paddingStart="64dp"
+        android:paddingTop="30dp"
+        android:paddingEnd="64dp"
+        android:paddingBottom="44dp">
 
+        <!-- WorldTV · Valid Till · Reload · menu -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
-                style="@style/Text.Title"
-                android:layout_width="wrap_content"
+                android:id="@+id/home_logo"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="@string/app_name" />
+                android:layout_weight="1"
+                android:shadowColor="#80000000"
+                android:shadowRadius="6"
+                android:textColor="#FFFFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/account"
-                style="@style/Text.Secondary"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                />
+                android:layout_marginEnd="20dp"
+                android:shadowColor="#80000000"
+                android:shadowRadius="4"
+                android:textColor="#B3FFFFFF"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:id="@+id/home_reload"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:background="@drawable/bg_glass_round"
+                android:contentDescription="@string/reload_playlist"
+                android:focusable="true"
+                android:padding="10dp"
+                android:src="@drawable/ic_refresh"
+                android:tint="#FFFFFFFF" />
+
+            <ImageView
+                android:id="@+id/home_menu"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="12dp"
+                android:background="@drawable/bg_glass_round"
+                android:contentDescription="@string/home_menu"
+                android:focusable="true"
+                android:padding="10dp"
+                android:src="@drawable/ic_more_vert"
+                android:tint="#FFFFFFFF" />
         </LinearLayout>
 
-        <ImageView
-            android:id="@+id/home_reload"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:background="@drawable/bg_icon_button"
-            android:contentDescription="@string/reload_playlist"
-            android:focusable="true"
-            android:padding="12dp"
-            android:src="@drawable/ic_refresh"
-            android:tint="?attr/wtTextPrimary" />
+        <!-- Reload progress: only while a reload runs, and for its result. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical|end"
+            android:minHeight="20dp"
+            android:orientation="horizontal">
 
-        <ImageView
-            android:id="@+id/home_menu"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_icon_button"
-            android:contentDescription="@string/home_menu"
-            android:focusable="true"
-            android:padding="12dp"
-            android:src="@drawable/ic_more_vert"
-            android:tint="?attr/wtTextPrimary" />
-    </LinearLayout>
+            <com.worldtv.iptvplayer.ui.LoadingDots
+                android:id="@+id/busy"
+                android:layout_width="36dp"
+                android:layout_height="9dp"
+                android:layout_marginEnd="10dp"
+                android:visibility="gone" />
 
-    <!-- Reload progress: shown only while a reload runs, and for its result. -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:gravity="center_vertical"
-        android:minHeight="24dp"
-        android:orientation="horizontal">
+            <TextView
+                android:id="@+id/reload_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:shadowColor="#80000000"
+                android:shadowRadius="4"
+                android:textColor="#CCFFFFFF"
+                android:textSize="13sp" />
+        </LinearLayout>
 
-        <com.worldtv.iptvplayer.ui.LoadingDots
-            android:id="@+id/busy"
-            android:layout_width="40dp"
-            android:layout_height="10dp"
-            android:layout_marginEnd="12dp"
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- The slide: title, year · genre · rating, two lines of plot, More info. -->
+        <LinearLayout
+            android:id="@+id/hero_info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/hero_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:shadowColor="#99000000"
+                android:shadowDy="2"
+                android:shadowRadius="12"
+                android:textColor="#FFFFFFFF"
+                android:textSize="38sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/hero_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:shadowColor="#80000000"
+                android:shadowRadius="4"
+                android:textColor="#C7FFFFFF"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/hero_plot"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:ellipsize="end"
+                android:lineSpacingMultiplier="1.15"
+                android:maxLines="2"
+                android:shadowColor="#80000000"
+                android:shadowRadius="4"
+                android:textColor="#C7FFFFFF"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/hero_more"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_more_info"
+                android:drawableStart="@drawable/ic_play"
+                android:drawablePadding="8dp"
+                android:drawableTint="@color/more_info_text"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:paddingStart="14dp"
+                android:paddingEnd="20dp"
+                android:text="@string/more_info"
+                android:textColor="@color/more_info_text"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/hero_dots"
+            android:layout_width="wrap_content"
+            android:layout_height="8dp"
+            android:layout_marginTop="26dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/reload_status"
-            style="@style/Text.Secondary"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="1"
-            android:ellipsize="end" />
-    </LinearLayout>
-
-    <!-- Big tiles, then the rows below them (built in HomeScreen), centred in the space left.
-         Scrolls only when there are more rows than the screen can show; focus brings them in. -->
-    <ScrollView
-        android:id="@+id/home_scroll"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true"
-        android:scrollbars="none">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="vertical"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="32dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
+            android:clipChildren="false"
             android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/tile_live"
-                style="@style/HomeTile"
-                android:drawableTop="@drawable/ic_live_tv"
+                style="@style/HomeTileWide"
+                android:drawableStart="@drawable/ic_live_tv"
                 android:text="@string/live_tv" />
 
             <TextView
                 android:id="@+id/tile_movies"
-                style="@style/HomeTile"
+                style="@style/HomeTileWide"
                 android:layout_marginStart="20dp"
-                android:drawableTop="@drawable/ic_movies"
+                android:drawableStart="@drawable/ic_movies"
                 android:text="@string/movies" />
 
             <TextView
                 android:id="@+id/tile_series"
-                style="@style/HomeTile"
+                style="@style/HomeTileWide"
                 android:layout_marginStart="20dp"
-                android:drawableTop="@drawable/ic_series"
+                android:drawableStart="@drawable/ic_series"
                 android:text="@string/series" />
         </LinearLayout>
 
-        <!-- The user's apps (App Settings > Home app slots; none by default), rows of 5. -->
+        <!-- The user's apps (Menu > Add app to home screen; none by default), rows of 5. -->
         <LinearLayout
             android:id="@+id/home_rows"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:orientation="vertical" />
-    </LinearLayout>
-    </ScrollView>
+            android:layout_marginTop="18dp"
+            android:orientation="vertical"
+            android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/version"
-        style="@style/Text.Secondary"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="end"
-        android:paddingBottom="20dp"
-        android:textSize="14sp" />
-</LinearLayout>
+        <!-- No slides: the tiles move to the middle. -->
+        <Space
+            android:id="@+id/home_bottom_space"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+</FrameLayout>
