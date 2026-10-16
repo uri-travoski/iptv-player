@@ -8,13 +8,15 @@ Users bring their own M3U URL or Xtream Codes login. The app ships no channels, 
 - MVP document: https://claude.ai/code/artifact/f7b3b895-aef4-4a3d-9555-9848fd1bd09e
 - Rules for contributors (and Claude Code): [CLAUDE.md](CLAUDE.md)
 
-## Get a test APK
+## Download the latest APK
 
-Each version's APK is built locally and attached to a **GitHub Release** (tag = version, e.g. `0.1.4`).
+**https://github.com/uri-travoski/iptv-player/releases/latest/download/worldtv.apk**
 
-1. Open **Releases** on the repo page and pick the newest one.
-2. Download `worldtv-<version>.apk`.
-3. Sideload it onto the box (e.g. with `adb install -r worldtv-<version>.apk`, or a USB stick and a file manager).
+That link always gives the newest version. Sideload it onto the box (e.g. with `adb install -r worldtv.apk`,
+or a USB stick and a file manager); once installed, WorldTV updates itself.
+
+Each version's APK is built locally and attached to a **GitHub Release** (tag = version, e.g. `2.45`) as
+`worldtv.apk` and `worldtv-<version>.apk`; older versions are on the **Releases** page.
 
 The **Build** workflow in GitHub Actions no longer runs on every push; start it by hand from the Actions tab if needed.
 
