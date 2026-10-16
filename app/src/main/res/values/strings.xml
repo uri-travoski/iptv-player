@@ -211,11 +211,13 @@
 
     <string name="first_load_title">Please wait while a free demo IPTV playlist is loaded…</string>
     <string name="first_load_failed">The free demo playlist could not be loaded: %1$s</string>
+    <string name="first_load_title_own">Please wait while your channels are loaded…</string>
+    <string name="first_load_failed_own">Your channels could not be loaded: %1$s</string>
     <string name="first_load_retry">Try again</string>
     <string name="first_load_own">Add my own playlist</string>
     <string name="first_load_paid">This demo has free-to-air channels only. A paid IPTV subscription can offer a lot more entertainment: thousands of live channels, sports, movies and series. Add yours any time in App Settings › Add playlist.</string>
     <string name="category_order_title">Categories order</string>
-    <string name="category_order_hint">Put the categories of Live TV, Movies and Series in your own order. OK (tap) on a category picks it up (⇅); Up / Down move it; OK again puts it down. Or use the buttons. Saved at once; reloads keep it.</string>
+    <string name="category_order_hint">Put the categories of Live TV, Movies and Series in your own order. OK (tap) on a category picks it up (⇅); Up / Down move it; OK again puts it down. Or use the buttons. Saved at once; reloads keep it. Until you do, Live TV lists the categories in the channel check first.</string>
     <string name="live_order_title">Live channel order</string>
     <string name="live_order_hint_categories">Choose a category to put its channels in your own order. Live TV then shows them that way (also in All).</string>
     <string name="live_order_hint">OK (tap) on a channel picks it up (⇅). Up / Down move it; OK again puts it down. Or use the buttons. Saved at once; reloads keep it.</string>
@@ -224,6 +226,8 @@
     <string name="order_down">▼ Down</string>
     <string name="order_bottom">Bottom</string>
     <string name="order_reset">Provider order</string>
+    <string name="order_reset_default">Default order</string>
+    <string name="order_reset_default_done">Back to the default order</string>
     <string name="order_reset_done">Back to the provider\'s order</string>
     <string name="order_pick_first">First pick a channel (OK on it)</string>
     <string name="ui_mode_title">How will you use WorldTV?</string>

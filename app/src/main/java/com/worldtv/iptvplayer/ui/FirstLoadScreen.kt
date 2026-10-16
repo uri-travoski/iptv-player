@@ -24,7 +24,15 @@ class FirstLoadScreen(activity: MainActivity) : Screen(activity) {
     private val own: View = root.findViewById(R.id.first_load_own)
     private var waiting: Job? = null
 
+    /** A family copy loads its own playlist (data/Preset), not the demo. */
+    private val preset = runCatching { activity.assets.open("preset.json").close() }.isSuccess
+
     init {
+        if (preset) {
+            root.findViewById<TextView>(R.id.first_load_title).setText(R.string.first_load_title_own)
+            root.findViewById<View>(R.id.first_load_paid).visibility = View.GONE
+            own.visibility = View.GONE
+        }
         retry.setOnClickListener { graph.startFirstLoad(); watch() }
         own.setOnClickListener {
             graph.firstLoadShown = true
@@ -70,7 +78,7 @@ class FirstLoadScreen(activity: MainActivity) : Screen(activity) {
                 activity.keepScreenOn(false)
                 spinner.visibility = View.GONE
                 status.setTextColor(activity.getColor(R.color.error))
-                status.text = activity.getString(R.string.first_load_failed, e.message ?: e.javaClass.simpleName)
+                status.text = activity.getString(if (preset) R.string.first_load_failed_own else R.string.first_load_failed, e.message ?: e.javaClass.simpleName)
                 buttons.visibility = View.VISIBLE
                 retry.requestFocus()
             }

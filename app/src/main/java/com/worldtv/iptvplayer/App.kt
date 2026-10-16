@@ -168,9 +168,13 @@ class AppGraph(private val app: Application) {
     }
     val syncer: Syncer by lazy {
         // Every successful load (add, Reload, automatic refresh) checks the chosen channels again.
-        Syncer(http, db, repo, io, { adultNames() }, telemetry, onSynced = {
-            channelCheck.request(it, fresh = true)
-            spotlight.onSynced(it)
+        Syncer(http, db, repo, io, { adultNames() }, telemetry, onSynced = { id ->
+            // A family copy's first load picks its categories (by name) before the check starts.
+            appScope.launch {
+                runCatching { com.worldtv.iptvplayer.data.Preset.afterSync(app, this@AppGraph, id) }
+                channelCheck.request(id, fresh = true)
+            }
+            spotlight.onSynced(id)
         })
     }
 
@@ -301,6 +305,9 @@ class AppGraph(private val app: Application) {
 
 /** Small settings and "last used" state. */
 class Prefs(private val sp: SharedPreferences) {
+
+    /** The underlying store, for one-off keys (Preset). */
+    val raw: SharedPreferences get() = sp
 
     companion object {
         const val MIN_SLOTS = 0

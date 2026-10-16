@@ -100,6 +100,31 @@ class DataLayerTest {
     }
 
     @Test
+    fun checkedCategoriesComeFirstUntilOrderedByHand(): Unit = runBlocking {
+        val id = repo.addPlaylist("Test", Playlist.KIND_M3U, "$base/list.m3u", null, null)
+        syncer.sync(repo.playlist(id)!!) {}
+        fun names() = runBlocking { repo.categoryOrder(id, ContentType.LIVE).map { it.name } }
+        assertEquals(listOf("News", "Sports"), names())
+
+        val sports = repo.categories(id, ContentType.LIVE).first { it.name == "Sports" }.key
+        repo.setCheckCategories(id, listOf(sports))
+        assertEquals(listOf("News", "Sports").reversed(), names())
+        // Just under Favourites in the Live TV list.
+        val all = repo.categories(id, ContentType.LIVE).map { it.name }
+        assertEquals(all.indexOf("Favourites") + 1, all.indexOf("Sports"))
+
+        // Put in order by hand: that order wins, checked or not.
+        repo.moveCategory(id, ContentType.LIVE, 0, 1)
+        assertEquals(listOf("News", "Sports"), names())
+        repo.setCheckCategories(id, listOf(sports))
+        assertEquals(listOf("News", "Sports"), names())
+
+        // Default order: checked first again.
+        repo.resetCategoryOrder(id, ContentType.LIVE)
+        assertEquals(listOf("Sports", "News"), names())
+    }
+
+    @Test
     fun episodesKeepTheirOwnProgress(): Unit = runBlocking {
         val id = repo.addPlaylist("Test", Playlist.KIND_M3U, "$base/list.m3u", null, null)
         val names = AdultNames(AdultNames.DEFAULT_CATEGORY_WORDS, AdultNames.DEFAULT_ENTRY_WORDS)

@@ -234,7 +234,7 @@ private fun SettingsScreen() {
                         }
                     }
                 }
-                SettingRow(Icons.AutoMirrored.Filled.Help, "Help and keyboard shortcuts", null) { nav.push(Route.Help) }
+                SettingRow(Icons.AutoMirrored.Filled.Help, "Help", "How everything works, and keyboard shortcuts") { nav.push(Route.Help) }
                 SettingRow(Icons.Default.Info, "About", "WorldTV ${BuildInfo.VERSION} for Linux · GPL-3.0 · plays with VLC") { Updates.open(Updates.PAGE) }
                 Spacer(Modifier.height(24.dp))
             }
@@ -778,60 +778,48 @@ private fun HiddenCategoriesScreen() {
 
 // ---- help ----
 
+/** The user guide (shared HelpGuide): topics on the left, the chosen one's text on the right. */
 @Composable
 private fun HelpScreen() {
     val nav = LocalNav.current
     val wt = LocalWt.current
-    val rows = listOf(
-        "Everywhere" to listOf(
-            "Esc" to "Back (and out of full screen)",
-            "F11" to "Window full screen",
-            "Ctrl+F" to "Search the list",
-        ),
-        "Live TV" to listOf(
-            "Click" to "Play in the preview",
-            "Double click, F" to "Full screen",
-            "Up / Down" to "Move in the list; in full screen: change channel",
-            "Page Up / Down" to "10 channels at a time; in full screen: change channel",
-            "Left / Right" to "Between categories and channels",
-            "Enter" to "Play; again: full screen",
-            "0, Backspace" to "Back to the channel before",
-            "Right click, Menu key" to "Favourites, groups, catch-up",
-        ),
-        "Films and episodes" to listOf(
-            "Space, click" to "Pause / play",
-            "Left / Right" to "10 s back / forward (with Shift: 1 min)",
-            "Page Up / Down" to "Previous / next episode",
-            "Up / Down, wheel" to "Volume",
-        ),
-        "Picture and sound" to listOf(
-            "M" to "Mute",
-            "+ / -" to "Volume",
-            "A" to "Next audio language",
-            "S" to "Next subtitles / off",
-            "Z" to "Picture shape: fit, fill, stretch, 16:9, 4:3",
-        ),
-    )
+    val topics = remember { com.worldtv.iptvplayer.data.help.HelpGuide.topics(com.worldtv.iptvplayer.data.help.HelpGuide.Platform.LINUX) }
+    var shown by remember { mutableStateOf(0) }
+    val textScroll = rememberScrollState()
+    LaunchedEffect(shown) { textScroll.scrollTo(0) }
     ThemedBackground {
         Column(Modifier.fillMaxSize()) {
             TopBar("Help", { nav.back() })
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 40.dp, vertical = 8.dp)) {
-                Text(
-                    "Add your provider's playlist in Settings › Add playlist: an Xtream login (server, username, password) " +
-                        "or an M3U link. Live TV, Movies and Series are on the home screen. Playback uses VLC, " +
-                        "so almost every stream plays.",
-                    color = wt.textPrimary, fontSize = 15.sp, lineHeight = 22.sp, modifier = Modifier.widthIn(max = 900.dp),
-                )
-                rows.forEach { (section, keys) ->
-                    Section(section)
-                    keys.forEach { (k, what) ->
-                        Row(Modifier.padding(vertical = 3.dp, horizontal = 8.dp)) {
-                            Box(Modifier.width(220.dp)) { Text(k, color = wt.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
-                            Text(what, color = wt.textSecondary, fontSize = 14.sp)
+            Row(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) {
+                LazyColumn(Modifier.width(300.dp).fillMaxHeight()) {
+                    topics.forEachIndexed { i, t ->
+                        if (i == 0 || topics[i - 1].group != t.group) {
+                            item(key = "g$i") {
+                                Text(
+                                    t.group.uppercase(), color = wt.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(start = 12.dp, top = if (i == 0) 4.dp else 16.dp, bottom = 4.dp),
+                                )
+                            }
+                        }
+                        item(key = "t$i") {
+                            ListRow(selected = i == shown, onClick = { shown = i }) {
+                                Text(t.title, color = wt.textPrimary, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.width(32.dp))
+                val t = topics[shown]
+                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(textScroll).padding(top = 4.dp, bottom = 24.dp)) {
+                    Text(t.group.uppercase(), color = wt.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(t.title, color = wt.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
+                    t.points.forEach {
+                        Text(
+                            "•  $it", color = wt.textSecondary, fontSize = 15.sp, lineHeight = 23.sp,
+                            modifier = Modifier.widthIn(max = 860.dp).padding(vertical = 5.dp),
+                        )
+                    }
+                }
             }
         }
     }

@@ -123,7 +123,8 @@ class MainActivity : ComponentActivity() {
         // very start, while the TV / Mobile choice is made. Only once: someone who deletes
         // every playlist gets the add screen instead.
         if (playlists.isEmpty() && !graph.prefs.defaultPlaylistAdded) {
-            graph.addDefaultPlaylist()
+            // A family copy brings its own playlist and settings instead (data/Preset).
+            if (!com.worldtv.iptvplayer.data.Preset.applyAtFirstStart(this, graph)) graph.addDefaultPlaylist()
             graph.startFirstLoad()
         } else if (graph.firstLoad == null && !graph.firstLoadShown) {
             // Restarted before that first load finished: carry on with it (and its "please wait").

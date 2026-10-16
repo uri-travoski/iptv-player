@@ -30,6 +30,7 @@ val sharedSources = tasks.register<Sync>("sharedSources") {
             "com/worldtv/iptvplayer/data/sync/**",
             "com/worldtv/iptvplayer/data/online/**",
             "com/worldtv/iptvplayer/data/update/**",
+            "com/worldtv/iptvplayer/data/help/**",
             "com/worldtv/iptvplayer/data/check/TsStats.kt",
             "com/worldtv/iptvplayer/data/check/ChannelProbe.kt",
             "com/worldtv/iptvplayer/data/spotlight/SpotlightPicker.kt",

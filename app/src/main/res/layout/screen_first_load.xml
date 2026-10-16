@@ -74,6 +74,7 @@
 
         <!-- What a paid subscription adds. -->
         <TextView
+            android:id="@+id/first_load_paid"
             style="@style/Text.Secondary"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

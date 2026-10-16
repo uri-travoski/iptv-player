@@ -213,7 +213,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         db.readableDatabase.rawQuery(
             "SELECT cat_id, name FROM category c WHERE playlist_id = ? AND type = ? AND NOT EXISTS(" +
                 "SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id AND h.type = c.type " +
-                "AND h.cat_id = c.cat_id) ORDER BY $CAT_POS",
+                "AND h.cat_id = c.cat_id) ORDER BY $CAT_CHECKED_FIRST, $CAT_POS",
             arrayOf(playlistId.toString(), type.ordinal.toString()),
         ).use { c ->
             while (c.moveToNext()) out += CategoryRow(c.getString(0), c.getString(1))
@@ -250,7 +250,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
             """SELECT e.item_id, e.stream_url FROM entry e
                JOIN check_category k ON k.playlist_id = e.playlist_id AND k.cat_id = e.category_id
                JOIN category c ON c.playlist_id = e.playlist_id AND c.type = e.type AND c.cat_id = e.category_id
-               WHERE e.playlist_id = ? AND e.type = ? ORDER BY $CAT_POS, e.sort""",
+               WHERE e.playlist_id = ? AND e.type = ? ORDER BY $CAT_CHECKED_FIRST, $CAT_POS, e.sort""",
             arrayOf(playlistId.toString(), ContentType.LIVE.ordinal.toString()),
         ).use { c ->
             val out = ArrayList<CheckTarget>(c.count)
@@ -305,16 +305,22 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         w.rawQuery(
             "SELECT cat_id, $CAT_POS FROM category c WHERE playlist_id = ? AND type = ? AND NOT EXISTS(" +
                 "SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id AND h.type = c.type " +
-                "AND h.cat_id = c.cat_id) ORDER BY $CAT_POS",
+                "AND h.cat_id = c.cat_id) ORDER BY $CAT_CHECKED_FIRST, $CAT_POS",
             arrayOf(playlistId.toString(), type.ordinal.toString()),
         ).use { c -> while (c.moveToNext()) rows += c.getString(0) to c.getLong(1) }
         if (from !in rows.indices || to !in rows.indices || from == to) return@withContext
-        val positions = rows.map { it.second }
+        // The first move by hand keeps the whole order as it is shown (e.g. checked categories
+        // first), from then on it is the user's.
+        val first = w.rawQuery(
+            "SELECT 1 FROM category_order WHERE playlist_id = ? AND type = ? LIMIT 1",
+            arrayOf(playlistId.toString(), type.ordinal.toString()),
+        ).use { !it.moveToFirst() }
+        val positions = if (first) rows.indices.map { it.toLong() } else rows.map { it.second }
         val ids = rows.map { it.first }.toMutableList()
         ids.add(to, ids.removeAt(from))
         w.beginTransaction()
         try {
-            for (i in minOf(from, to)..maxOf(from, to)) {
+            for (i in if (first) rows.indices else minOf(from, to)..maxOf(from, to)) {
                 w.execSQL(
                     "INSERT OR REPLACE INTO category_order (playlist_id, type, cat_id, pos) VALUES (?, ?, ?, ?)",
                     arrayOf<Any>(playlistId, type.ordinal, ids[i], positions[i]),
@@ -344,7 +350,7 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         ).use { c -> while (c.moveToNext()) c.getString(0)?.let { hiddenPerCat[it] = c.getInt(1) } }
         r.rawQuery(
             "SELECT cat_id, name, EXISTS(SELECT 1 FROM hidden_category h WHERE h.playlist_id = c.playlist_id " +
-                "AND h.type = c.type AND h.cat_id = c.cat_id) FROM category c WHERE playlist_id = ? AND type = ? ORDER BY $CAT_POS",
+                "AND h.type = c.type AND h.cat_id = c.cat_id) FROM category c WHERE playlist_id = ? AND type = ? ORDER BY $CAT_CHECKED_FIRST, $CAT_POS",
             args,
         ).use { c ->
             val out = ArrayList<AdminCategory>(c.count)
@@ -1274,6 +1280,13 @@ class Repository(private val db: Db, private val io: CoroutineDispatcher, privat
         /** Live TV's Most watched list (see MostWatched). */
         const val KEY_MOST_WATCHED = "\u0000mostwatched"
         /** A row's place in Most watched (0 = top). */
+        /**
+         * Live TV: until the categories are put in order by hand, the ones in the channel check
+         * list come first (just under Favourites). 0 = up there, 1 = the rest.
+         */
+        private const val CAT_CHECKED_FIRST = "CASE WHEN c.type = 0 AND NOT EXISTS(SELECT 1 FROM category_order o " +
+            "WHERE o.playlist_id = c.playlist_id AND o.type = c.type) AND EXISTS(SELECT 1 FROM check_category k " +
+            "WHERE k.playlist_id = c.playlist_id AND k.cat_id = c.cat_id) THEN 0 ELSE 1 END"
         /** A category's place: set by hand (category_order), else the provider's. */
         private const val CAT_POS = "COALESCE((SELECT o.pos FROM category_order o WHERE o.playlist_id = c.playlist_id AND o.type = c.type AND o.cat_id = c.cat_id), c.sort)"
         /** A live channel's place: set by hand (live_order), else the provider's. */

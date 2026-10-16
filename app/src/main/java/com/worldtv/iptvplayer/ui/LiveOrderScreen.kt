@@ -81,6 +81,8 @@ class LiveOrderScreen(
             root.findViewById<View>(R.id.move_down).setOnClickListener { moveTo(picked + 1) }
             root.findViewById<View>(R.id.move_bottom).setOnClickListener { moveTo(rows.size - 1) }
             root.findViewById<View>(R.id.order_reset).setOnClickListener { resetOrder() }
+            // Categories: back to the default (Live TV: channel check categories first).
+            if (categories) root.findViewById<android.widget.TextView>(R.id.order_reset).setText(R.string.order_reset_default)
         }
     }
 
@@ -169,7 +171,7 @@ class LiveOrderScreen(
         scope.launch {
             if (categories) graph.repo.resetCategoryOrder(playlist.id, type)
             else graph.repo.resetLiveOrder(playlist.id, category!!.key)
-            activity.toast(activity.getString(R.string.order_reset_done))
+            activity.toast(activity.getString(if (categories) R.string.order_reset_default_done else R.string.order_reset_done))
             load(focus = 0)
         }
     }
